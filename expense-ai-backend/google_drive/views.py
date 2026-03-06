@@ -92,4 +92,25 @@ def list_drive_files(request):
         ).execute()
         return JsonResponse(results.get('files', []), safe=False)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        # Provide richer error information when DEBUG is enabled to help
+        # during local development (traceback is included).
+        import traceback
+        tb = traceback.format_exc()
+
+        # Some google api errors (HttpError) don't include a useful str(),
+        # but expose a `.content` attribute with the response body.
+        extra = None
+        try:
+            extra = getattr(e, 'content', None)
+            if extra and isinstance(extra, (bytes, bytearray)):
+                extra = extra.decode('utf-8', errors='replace')
+        except Exception:
+            extra = None
+
+        if settings.DEBUG:
+            payload = {'error': str(e) or 'HttpError', 'traceback': tb}
+            if extra:
+                payload['detail'] = extra
+            return JsonResponse(payload, status=500)
+
+        return JsonResponse({'error': 'Internal server error'}, status=500)
