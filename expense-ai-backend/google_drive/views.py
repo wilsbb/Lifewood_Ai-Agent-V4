@@ -1,4 +1,8 @@
 import os
+<<<<<<< HEAD
+=======
+import json
+>>>>>>> 473cca456143f8c06579e52a6f5334859d64b64d
 import tempfile
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
@@ -12,61 +16,66 @@ from googleapiclient.http import MediaFileUpload
 from .models import GoogleDriveToken
 from .utils import get_user_drive_credentials
 
-# Allow OAuth over HTTP for local development
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-# Configuration
-GOOGLE_CLIENT_SECRETS = getattr(
-    settings,
-    'GOOGLE_CLIENT_SECRETS',
-    os.path.join(settings.BASE_DIR, 'expense_ai', 'credentials.json')
-)
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')
+OAUTH_REDIRECT_URI = os.environ.get(
+    'OAUTH_REDIRECT_URI',
+    f'{BACKEND_URL}/api/google/callback/'
+)
+
+
+def _get_client_secrets_file():
+    """
+    Returns a path to credentials.json.
+    On Railway, reads from the GOOGLE_CREDENTIALS_JSON env var and writes a temp file.
+    Locally, reads from the repo path set in settings.
+    """
+    creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+    if creds_json:
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        json.dump(json.loads(creds_json), tmp)
+        tmp.close()
+        return tmp.name
+    return settings.GOOGLE_CLIENT_SECRETS
+
+
 def google_drive_auth(request):
-    """Step 1: Redirect user to Google Authorization page."""
     flow = Flow.from_client_secrets_file(
-        GOOGLE_CLIENT_SECRETS,
+        _get_client_secrets_file(),
         scopes=SCOPES,
-        redirect_uri='http://localhost:8000/api/google/callback/'
+        redirect_uri=OAUTH_REDIRECT_URI,
     )
-    
     authorization_url, state = flow.authorization_url(
         access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent'  # Forces Google to provide a refresh_token
+        prompt='consent',
     )
-    
-    # Store verifier and state in session
-    request.session['code_verifier'] = flow.code_verifier
     request.session['state'] = state
-    
     return redirect(authorization_url)
 
-def oauth2callback(request):
-    """Step 2: Handle the callback from Google and save tokens."""
-    if not request.user.is_authenticated:
-        return redirect('http://localhost:8000/admin/login/')
 
-    saved_verifier = request.session.get('code_verifier')
-    
+def oauth2callback(request):
+    if not request.user.is_authenticated:
+        return redirect(f'{BACKEND_URL}/admin/login/')
+
     flow = Flow.from_client_secrets_file(
-        GOOGLE_CLIENT_SECRETS,
+        _get_client_secrets_file(),
         scopes=SCOPES,
-        redirect_uri='http://localhost:8000/api/google/callback/',
-        code_verifier=saved_verifier
+        redirect_uri=OAUTH_REDIRECT_URI,
     )
-    
+
     try:
         flow.fetch_token(authorization_response=request.build_absolute_uri())
     except Exception as e:
         print(f"Token fetch failed: {e}")
-        return redirect('http://localhost:3000?error=auth_failed')
+        return redirect(f'{FRONTEND_URL}?error=auth_failed')
 
     creds = flow.credentials
 
-    # Save or update tokens in the database
     GoogleDriveToken.objects.update_or_create(
         user=request.user,
         defaults={
@@ -79,12 +88,12 @@ def oauth2callback(request):
         }
     )
 
-    return redirect('http://localhost:3000/drive?status=success')
+    return redirect(f'{FRONTEND_URL}/drive?status=success')
+
 
 def list_drive_files(request):
-    """Fetch Lifewood folders and their contents as a nested tree."""
     creds = get_user_drive_credentials(request.user)
-    
+
     if not creds:
         return JsonResponse({'error': 'Not authenticated'}, status=401)
 
@@ -92,7 +101,6 @@ def list_drive_files(request):
         service = build('drive', 'v3', credentials=creds)
 
         def get_children(folder_id):
-            """Recursively fetch contents of a folder."""
             results = service.files().list(
                 q=f"'{folder_id}' in parents and trashed=false",
                 fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
@@ -105,7 +113,6 @@ def list_drive_files(request):
                     item['children'] = get_children(item['id'])
             return items
 
-        # Find all folders whose name contains "lifewood" (case-insensitive)
         folders_result = service.files().list(
             q="mimeType='application/vnd.google-apps.folder' and name contains 'lifewood' and trashed=false",
             fields="files(id, name, mimeType, webViewLink)",
@@ -114,7 +121,6 @@ def list_drive_files(request):
         ).execute()
 
         lifewood_folders = folders_result.get('files', [])
-
         for folder in lifewood_folders:
             folder['children'] = get_children(folder['id'])
 
@@ -123,15 +129,8 @@ def list_drive_files(request):
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        extra = None
-        try:
-            extra = getattr(e, 'content', None)
-            if extra and isinstance(extra, (bytes, bytearray)):
-                extra = extra.decode('utf-8', errors='replace')
-        except Exception:
-            extra = None
-
         if settings.DEBUG:
+<<<<<<< HEAD
             payload = {'error': str(e) or 'HttpError', 'traceback': tb}
             if extra:
                 payload['detail'] = extra
@@ -235,3 +234,7 @@ def delete_drive_file(request, file_id):
         if settings.DEBUG:
             return JsonResponse({'error': str(e)}, status=500)
         return JsonResponse({'error': 'Unable to delete file'}, status=500)
+=======
+            return JsonResponse({'error': str(e), 'traceback': tb}, status=500)
+        return JsonResponse({'error': 'Internal server error'}, status=500)
+>>>>>>> 473cca456143f8c06579e52a6f5334859d64b64d

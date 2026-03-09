@@ -1,0 +1,11 @@
+django>=4.2
+gunicorn
+django-cors-headers
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+psycopg2-binary
+python-dotenv
+dj-database-url
+whitenoise
