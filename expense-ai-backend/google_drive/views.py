@@ -1,17 +1,17 @@
 import os
-<<<<<<< HEAD
-=======
 import json
->>>>>>> 473cca456143f8c06579e52a6f5334859d64b64d
 import tempfile
+import uuid
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
 from django.conf import settings
+from django.contrib.auth import get_user_model, login as auth_login
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import requests
 
 from .models import GoogleDriveToken
 from .utils import get_user_drive_credentials
@@ -54,18 +54,63 @@ def google_drive_auth(request):
         access_type='offline',
         prompt='consent',
     )
+    request.session['google_oauth_state'] = state
+    request.session['google_oauth_code_verifier'] = getattr(flow, 'code_verifier', None)
     request.session['state'] = state
     return redirect(authorization_url)
 
 
+def _get_or_create_google_user(creds):
+    """Map the Google account to a local Django user for token ownership."""
+    response = requests.get(
+        'https://www.googleapis.com/oauth2/v2/userinfo',
+        headers={'Authorization': f'Bearer {creds.token}'},
+        timeout=10,
+    )
+    response.raise_for_status()
+    profile = response.json()
+
+    email = profile.get('email')
+    if not email:
+        raise ValueError('Google account email is missing from userinfo response.')
+
+    User = get_user_model()
+    user = User.objects.filter(email__iexact=email).first()
+    if user:
+        return user
+
+    base_username = (
+        profile.get('name')
+        or email.split('@')[0]
+        or f'user-{uuid.uuid4().hex[:8]}'
+    )
+    candidate = ''.join(ch if ch.isalnum() else '-' for ch in base_username.lower()).strip('-') or 'user'
+    username = candidate
+    suffix = 1
+    while User.objects.filter(username=username).exists():
+        suffix += 1
+        username = f'{candidate}-{suffix}'
+
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        first_name=profile.get('given_name', ''),
+        last_name=profile.get('family_name', ''),
+        password=User.objects.make_random_password(),
+    )
+    return user
+
+
 def oauth2callback(request):
-    if not request.user.is_authenticated:
-        return redirect(f'{BACKEND_URL}/admin/login/')
+    saved_state = request.session.get('google_oauth_state')
+    saved_verifier = request.session.get('google_oauth_code_verifier')
 
     flow = Flow.from_client_secrets_file(
         _get_client_secrets_file(),
         scopes=SCOPES,
         redirect_uri=OAUTH_REDIRECT_URI,
+        state=saved_state,
+        code_verifier=saved_verifier,
     )
 
     try:
@@ -75,9 +120,11 @@ def oauth2callback(request):
         return redirect(f'{FRONTEND_URL}?error=auth_failed')
 
     creds = flow.credentials
+    user = request.user if request.user.is_authenticated else _get_or_create_google_user(creds)
+    auth_login(request, user)
 
     GoogleDriveToken.objects.update_or_create(
-        user=request.user,
+        user=user,
         defaults={
             'access_token': creds.token,
             'refresh_token': creds.refresh_token,
@@ -130,11 +177,7 @@ def list_drive_files(request):
         import traceback
         tb = traceback.format_exc()
         if settings.DEBUG:
-<<<<<<< HEAD
-            payload = {'error': str(e) or 'HttpError', 'traceback': tb}
-            if extra:
-                payload['detail'] = extra
-            return JsonResponse(payload, status=500)
+            return JsonResponse({'error': str(e) or 'HttpError', 'traceback': tb}, status=500)
 
         return JsonResponse({'error': 'Internal server error'}, status=500)
 
@@ -234,7 +277,3 @@ def delete_drive_file(request, file_id):
         if settings.DEBUG:
             return JsonResponse({'error': str(e)}, status=500)
         return JsonResponse({'error': 'Unable to delete file'}, status=500)
-=======
-            return JsonResponse({'error': str(e), 'traceback': tb}, status=500)
-        return JsonResponse({'error': 'Internal server error'}, status=500)
->>>>>>> 473cca456143f8c06579e52a6f5334859d64b64d
