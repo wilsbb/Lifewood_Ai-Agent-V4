@@ -20,4 +20,5 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/google/', include('google_drive.urls')),
+    path('api/billing/', include('billing.urls')),
 ]
