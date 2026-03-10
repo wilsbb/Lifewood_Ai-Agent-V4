@@ -21,7 +21,11 @@ if settings.DEBUG:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-SCOPES = ['https://www.googleapis.com/auth/drive']
+SCOPES = ['https://www.googleapis.com/auth/drive',
+            'openid',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+]
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')
@@ -64,18 +68,14 @@ def google_drive_auth(request):
 
 
 def _get_or_create_google_user(creds):
-    """Map the Google account to a local Django user for token ownership."""
-    response = requests.get(
-        'https://www.googleapis.com/oauth2/v2/userinfo',
-        headers={'Authorization': f'Bearer {creds.token}'},
-        timeout=10,
-    )
-    response.raise_for_status()
-    profile = response.json()
+    """Map the Google account to a local Django user using the id_token."""
+    id_token = creds.id_token
+    if not id_token or not isinstance(id_token, dict):
+        raise ValueError(f'id_token missing or invalid: {id_token}')
 
-    email = profile.get('email')
+    email = id_token.get('email')
     if not email:
-        raise ValueError('Google account email is missing from userinfo response.')
+        raise ValueError('Email missing from id_token.')
 
     User = get_user_model()
     user = User.objects.filter(email__iexact=email).first()
@@ -83,7 +83,7 @@ def _get_or_create_google_user(creds):
         return user
 
     base_username = (
-        profile.get('name')
+        id_token.get('name')
         or email.split('@')[0]
         or f'user-{uuid.uuid4().hex[:8]}'
     )
@@ -94,12 +94,13 @@ def _get_or_create_google_user(creds):
         suffix += 1
         username = f'{candidate}-{suffix}'
 
+    import secrets
     user = User.objects.create_user(
         username=username,
         email=email,
-        first_name=profile.get('given_name', ''),
-        last_name=profile.get('family_name', ''),
-        password=User.objects.make_random_password(),
+        first_name=id_token.get('given_name', ''),
+        last_name=id_token.get('family_name', ''),
+        password=secrets.token_urlsafe(32),
     )
     return user
 
