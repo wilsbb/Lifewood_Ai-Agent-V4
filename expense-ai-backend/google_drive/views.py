@@ -134,7 +134,7 @@ def oauth2callback(request):
         auth_login(request, user)
     except Exception as e:
         print(f"User creation/login failed: {e}")
-        return redirect(f'{FRONTEND_URL}?error=user_failed')
+        return redirect(f'{FRONTEND_URL}?error=user_failed&reason={str(e)}')
 
     try:
         token_defaults = {
