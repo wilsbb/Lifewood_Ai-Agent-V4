@@ -16,7 +16,9 @@ import requests
 from .models import GoogleDriveToken
 from .utils import get_user_drive_credentials
 
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+# Only disable HTTPS check in local development
+if settings.DEBUG:
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
@@ -121,20 +123,33 @@ def oauth2callback(request):
         return redirect(f'{FRONTEND_URL}?error=auth_failed')
 
     creds = flow.credentials
-    user = request.user if request.user.is_authenticated else _get_or_create_google_user(creds)
-    auth_login(request, user)
 
-    GoogleDriveToken.objects.update_or_create(
-        user=user,
-        defaults={
+    try:
+        user = request.user if request.user.is_authenticated else _get_or_create_google_user(creds)
+        auth_login(request, user)
+    except Exception as e:
+        print(f"User creation/login failed: {e}")
+        return redirect(f'{FRONTEND_URL}?error=user_failed')
+
+    try:
+        token_defaults = {
             'access_token': creds.token,
-            'refresh_token': creds.refresh_token,
             'token_uri': creds.token_uri,
             'client_id': creds.client_id,
             'client_secret': creds.client_secret,
             'scopes': ','.join(creds.scopes),
         }
-    )
+        # Only update refresh_token if Google returned one
+        if creds.refresh_token:
+            token_defaults['refresh_token'] = creds.refresh_token
+
+        GoogleDriveToken.objects.update_or_create(
+            user=user,
+            defaults=token_defaults
+        )
+    except Exception as e:
+        print(f"Token save failed: {e}")
+        return redirect(f'{FRONTEND_URL}?error=token_save_failed')
 
     return redirect(f'{FRONTEND_URL}/drive?status=success')
 
@@ -195,7 +210,6 @@ def get_drive_file_content(request, file_id):
         metadata = service.files().get(fileId=file_id, fields="id,name,mimeType").execute()
         mime_type = metadata.get('mimeType', 'application/octet-stream')
 
-        # Google-native docs cannot be fetched as raw media without export logic.
         if mime_type.startswith('application/vnd.google-apps'):
             return JsonResponse(
                 {'error': 'Preview is only available for uploaded files, not Google-native documents.'},
