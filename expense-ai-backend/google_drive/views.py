@@ -1,116 +1,62 @@
 import os
-import json
-import tempfile
-import uuid
 from django.shortcuts import redirect
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.conf import settings
-from django.contrib.auth import get_user_model, login as auth_login
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-import requests
+from google.oauth2.credentials import Credentials
 
 from .models import GoogleDriveToken
 from .utils import get_user_drive_credentials
 
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
+# Allow OAuth over HTTP for local development only
+if os.environ.get('DEBUG', 'False') == 'True':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
+GOOGLE_CLIENT_SECRETS = getattr(
+    settings,
+    'GOOGLE_CLIENT_SECRETS',
+    os.path.join(settings.BASE_DIR, 'expense_ai', 'credentials.json')
+)
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
+# Read from env so it works both locally and on Railway
+BASE_URL = os.environ.get('BASE_URL', 'http://localhost:8000')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')
-OAUTH_REDIRECT_URI = os.environ.get(
-    'OAUTH_REDIRECT_URI',
-    f'{BACKEND_URL}/api/google/callback/'
-)
-
-
-def _get_client_secrets_file():
-    """
-    Returns a path to credentials.json.
-    On Railway, reads from the GOOGLE_CREDENTIALS_JSON env var and writes a temp file.
-    Locally, reads from the repo path set in settings.
-    """
-    creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-    if creds_json:
-        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        json.dump(json.loads(creds_json), tmp)
-        tmp.close()
-        return tmp.name
-    return settings.GOOGLE_CLIENT_SECRETS
 
 
 def google_drive_auth(request):
+    """Step 1: Redirect user to Google Authorization page."""
     flow = Flow.from_client_secrets_file(
-        _get_client_secrets_file(),
+        GOOGLE_CLIENT_SECRETS,
         scopes=SCOPES,
-        redirect_uri=OAUTH_REDIRECT_URI,
+        redirect_uri=f'{BASE_URL}/api/google/callback/'
     )
+
     authorization_url, state = flow.authorization_url(
         access_type='offline',
-        prompt='consent',
+        include_granted_scopes='true',
+        prompt='consent'
     )
-    request.session['google_oauth_state'] = state
-    request.session['google_oauth_code_verifier'] = getattr(flow, 'code_verifier', None)
+
+    request.session['code_verifier'] = flow.code_verifier
     request.session['state'] = state
+
     return redirect(authorization_url)
 
 
-def _get_or_create_google_user(creds):
-    """Map the Google account to a local Django user for token ownership."""
-    response = requests.get(
-        'https://www.googleapis.com/oauth2/v2/userinfo',
-        headers={'Authorization': f'Bearer {creds.token}'},
-        timeout=10,
-    )
-    response.raise_for_status()
-    profile = response.json()
-
-    email = profile.get('email')
-    if not email:
-        raise ValueError('Google account email is missing from userinfo response.')
-
-    User = get_user_model()
-    user = User.objects.filter(email__iexact=email).first()
-    if user:
-        return user
-
-    base_username = (
-        profile.get('name')
-        or email.split('@')[0]
-        or f'user-{uuid.uuid4().hex[:8]}'
-    )
-    candidate = ''.join(ch if ch.isalnum() else '-' for ch in base_username.lower()).strip('-') or 'user'
-    username = candidate
-    suffix = 1
-    while User.objects.filter(username=username).exists():
-        suffix += 1
-        username = f'{candidate}-{suffix}'
-
-    user = User.objects.create_user(
-        username=username,
-        email=email,
-        first_name=profile.get('given_name', ''),
-        last_name=profile.get('family_name', ''),
-        password=User.objects.make_random_password(),
-    )
-    return user
-
-
 def oauth2callback(request):
-    saved_state = request.session.get('google_oauth_state')
-    saved_verifier = request.session.get('google_oauth_code_verifier')
+    """Step 2: Handle the callback from Google and save tokens."""
+    if not request.user.is_authenticated:
+        return redirect(f'{BASE_URL}/admin/login/')
+
+    saved_verifier = request.session.get('code_verifier')
 
     flow = Flow.from_client_secrets_file(
-        _get_client_secrets_file(),
+        GOOGLE_CLIENT_SECRETS,
         scopes=SCOPES,
-        redirect_uri=OAUTH_REDIRECT_URI,
-        state=saved_state,
-        code_verifier=saved_verifier,
+        redirect_uri=f'{BASE_URL}/api/google/callback/',
+        code_verifier=saved_verifier
     )
 
     try:
@@ -120,11 +66,9 @@ def oauth2callback(request):
         return redirect(f'{FRONTEND_URL}?error=auth_failed')
 
     creds = flow.credentials
-    user = request.user if request.user.is_authenticated else _get_or_create_google_user(creds)
-    auth_login(request, user)
 
     GoogleDriveToken.objects.update_or_create(
-        user=user,
+        user=request.user,
         defaults={
             'access_token': creds.token,
             'refresh_token': creds.refresh_token,
@@ -139,6 +83,7 @@ def oauth2callback(request):
 
 
 def list_drive_files(request):
+    """Step 3: Fetch files from Drive using stored credentials."""
     creds = get_user_drive_credentials(request.user)
 
     if not creds:
@@ -146,135 +91,28 @@ def list_drive_files(request):
 
     try:
         service = build('drive', 'v3', credentials=creds)
-
-        def get_children(folder_id):
-            results = service.files().list(
-                q=f"'{folder_id}' in parents and trashed=false",
-                fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
-                pageSize=200,
-                orderBy="folder,name"
-            ).execute()
-            items = results.get('files', [])
-            for item in items:
-                if item['mimeType'] == 'application/vnd.google-apps.folder':
-                    item['children'] = get_children(item['id'])
-            return items
-
-        folders_result = service.files().list(
-            q="mimeType='application/vnd.google-apps.folder' and name contains 'lifewood' and trashed=false",
-            fields="files(id, name, mimeType, webViewLink)",
-            pageSize=50,
-            orderBy="name"
+        results = service.files().list(
+            pageSize=100,
+            q="trashed=false",
+            fields="files(id, name, mimeType, parents)"
         ).execute()
-
-        lifewood_folders = folders_result.get('files', [])
-        for folder in lifewood_folders:
-            folder['children'] = get_children(folder['id'])
-
-        return JsonResponse(lifewood_folders, safe=False)
-
+        return JsonResponse(results.get('files', []), safe=False)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
+
+        extra = None
+        try:
+            extra = getattr(e, 'content', None)
+            if extra and isinstance(extra, (bytes, bytearray)):
+                extra = extra.decode('utf-8', errors='replace')
+        except Exception:
+            extra = None
+
         if settings.DEBUG:
-            return JsonResponse({'error': str(e) or 'HttpError', 'traceback': tb}, status=500)
+            payload = {'error': str(e) or 'HttpError', 'traceback': tb}
+            if extra:
+                payload['detail'] = extra
+            return JsonResponse(payload, status=500)
 
         return JsonResponse({'error': 'Internal server error'}, status=500)
-
-
-def get_drive_file_content(request, file_id):
-    """Stream a Google Drive file through the backend for in-app previews."""
-    creds = get_user_drive_credentials(request.user)
-
-    if not creds:
-        return JsonResponse({'error': 'Not authenticated'}, status=401)
-
-    try:
-        service = build('drive', 'v3', credentials=creds)
-        metadata = service.files().get(fileId=file_id, fields="id,name,mimeType").execute()
-        mime_type = metadata.get('mimeType', 'application/octet-stream')
-
-        # Google-native docs cannot be fetched as raw media without export logic.
-        if mime_type.startswith('application/vnd.google-apps'):
-            return JsonResponse(
-                {'error': 'Preview is only available for uploaded files, not Google-native documents.'},
-                status=400,
-            )
-
-        content = service.files().get_media(fileId=file_id).execute()
-        response = HttpResponse(content, content_type=mime_type)
-        response['Content-Disposition'] = f'inline; filename="{metadata.get("name", file_id)}"'
-        return response
-    except Exception as e:
-        if settings.DEBUG:
-            return JsonResponse({'error': str(e)}, status=500)
-        return JsonResponse({'error': 'Unable to load file content'}, status=500)
-
-
-@csrf_exempt
-@require_POST
-def upload_drive_file(request, folder_id):
-    """Upload a file to a selected Google Drive folder using stored OAuth credentials."""
-    creds = get_user_drive_credentials(request.user)
-
-    if not creds:
-        return JsonResponse({'error': 'Not authenticated'}, status=401)
-
-    uploaded_file = request.FILES.get('file')
-    if not uploaded_file:
-        return JsonResponse({'error': 'No file uploaded'}, status=400)
-
-    temp_path = None
-
-    try:
-        service = build('drive', 'v3', credentials=creds)
-
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            for chunk in uploaded_file.chunks():
-                temp_file.write(chunk)
-            temp_path = temp_file.name
-
-        file_metadata = {
-            'name': uploaded_file.name,
-            'parents': [folder_id],
-        }
-        media = MediaFileUpload(
-            temp_path,
-            mimetype=uploaded_file.content_type or 'application/octet-stream',
-            resumable=False,
-        )
-
-        created = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id,name,mimeType,size,modifiedTime',
-        ).execute()
-
-        created['webViewLink'] = f'https://drive.google.com/file/d/{created["id"]}/view'
-        return JsonResponse(created, status=201)
-    except Exception as e:
-        if settings.DEBUG:
-            return JsonResponse({'error': str(e)}, status=500)
-        return JsonResponse({'error': 'Unable to upload file'}, status=500)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
-
-
-@csrf_exempt
-@require_POST
-def delete_drive_file(request, file_id):
-    """Delete a Google Drive item using stored OAuth credentials."""
-    creds = get_user_drive_credentials(request.user)
-
-    if not creds:
-        return JsonResponse({'error': 'Not authenticated'}, status=401)
-
-    try:
-        service = build('drive', 'v3', credentials=creds)
-        service.files().delete(fileId=file_id).execute()
-        return JsonResponse({'success': True})
-    except Exception as e:
-        if settings.DEBUG:
-            return JsonResponse({'error': str(e)}, status=500)
-        return JsonResponse({'error': 'Unable to delete file'}, status=500)
