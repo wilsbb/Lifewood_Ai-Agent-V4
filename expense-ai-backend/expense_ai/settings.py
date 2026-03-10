@@ -94,3 +94,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Google credentials — path to file locally, or JSON string from env on Railway
 GOOGLE_CLIENT_SECRETS = os.path.join(BASE_DIR, 'expense_ai', 'credentials.json')
+
+# --- Deployment / Proxy Settings ---
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True

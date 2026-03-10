@@ -105,7 +105,6 @@ def _get_or_create_google_user(creds):
 
 
 def oauth2callback(request):
-    # Get state from session, fall back to request param if session was lost
     saved_state = request.session.get('google_oauth_state') or request.GET.get('state')
     saved_verifier = request.session.get('google_oauth_code_verifier')
 
@@ -118,7 +117,12 @@ def oauth2callback(request):
     )
 
     try:
-        flow.fetch_token(authorization_response=request.build_absolute_uri())
+        # Fix: Railway proxy passes http internally, force https for oauthlib
+        auth_response = request.build_absolute_uri()
+        if not settings.DEBUG and auth_response.startswith('http://'):
+            auth_response = 'https://' + auth_response[len('http://'):]
+
+        flow.fetch_token(authorization_response=auth_response)
     except Exception as e:
         print(f"Token fetch failed: {e}")
         return redirect(f'{FRONTEND_URL}?error=auth_failed&reason={str(e)}')
