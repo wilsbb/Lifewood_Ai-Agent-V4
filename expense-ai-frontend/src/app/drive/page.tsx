@@ -1,6 +1,7 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { ChevronRight, CheckCircle2, File, Folder, FolderOpen, Grid3X3, LayoutList, Loader2, LogOut, Search, WifiOff } from 'lucide-react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { driveService } from '../../services/driveService';
 import styles from './page.module.css';
@@ -41,6 +42,26 @@ function summarizeTree(items: DriveItem[]) {
   return { folderCount, fileCount };
 }
 
+const GREETINGS = ['Good day, admin', 'Welcome back, admin', 'Hello, admin'];
+
+function useCyclingGreeting(intervalMs: number) {
+  const [index, setIndex] = useState(0);
+  const [animClass, setAnimClass] = useState('splitIn');
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setAnimClass('splitOut');
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % GREETINGS.length);
+        setAnimClass('splitIn');
+      }, 500);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+
+  return { greeting: GREETINGS[index], animClass };
+}
+
 export default function DrivePage() {
   const router = useRouter();
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -49,6 +70,7 @@ export default function DrivePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const { greeting, animClass } = useCyclingGreeting(15000);
 
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
 
@@ -87,9 +109,9 @@ export default function DrivePage() {
     return (
       <main className={styles.pageShell}>
         <section className={styles.loadingState}>
-          <span className={styles.badge}>Drive Sync</span>
-          <h1>Loading scanned folders</h1>
-          <p>Preparing your Lifewood Google Drive dashboard.</p>
+          <Loader2 className={styles.spinner} size={32} />
+          <h1>Loading your workspace</h1>
+          <p>Syncing scanned folders from Google Drive&hellip;</p>
         </section>
       </main>
     );
@@ -99,11 +121,11 @@ export default function DrivePage() {
     return (
       <main className={styles.pageShell}>
         <section className={styles.loadingState}>
-          <span className={styles.badge}>Connection issue</span>
-          <h1>Drive data is not available</h1>
+          <WifiOff size={28} style={{ opacity: 0.6 }} />
+          <h1>Unable to connect</h1>
           <p>{error}</p>
           <a className={styles.primaryAction} href="/">
-            Return to landing page
+            Return home
           </a>
         </section>
       </main>
@@ -116,8 +138,12 @@ export default function DrivePage() {
         <a className={styles.brand} href="/drive">
           <img alt="Lifewood" className={styles.brandLogo} src={LOGO_URL} />
         </a>
+        <nav className={styles.topbarNav}>
+          <span className={styles.navLabel}>Dashboard</span>
+        </nav>
         <div className={styles.topbarActions}>
           <a className={styles.signOut} href="/">
+            <LogOut size={14} />
             Sign Out
           </a>
         </div>
@@ -125,22 +151,30 @@ export default function DrivePage() {
 
       <section className={styles.hero}>
         <div className={styles.heroCard}>
-          <span className={styles.badge}>Always On Never Off</span>
-          <h1>
-            Good day, <em>admin</em>
+          <div className={styles.heroTicker} aria-label="Always on never off">
+            <div className={styles.heroTickerTrack}>
+              <span>Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
+              <span aria-hidden="true">Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
+            </div>
+          </div>
+          <h1 className={`${styles.greetingText} ${animClass === 'splitIn' ? styles.splitIn : styles.splitOut}`}>
+            {greeting}
           </h1>
-          <p>Choose a scanned expense folder to open its Lifewood review workspace.</p>
+          <p>Select a scanned expense folder below to open its review workspace.</p>
         </div>
         <div className={styles.heroMetrics}>
           <article className={styles.metricCard}>
+            <FolderOpen className={styles.metricIcon} size={18} />
             <span>Top-level scans</span>
             <strong>{folders.length}</strong>
           </article>
           <article className={styles.metricCard}>
+            <Folder className={styles.metricIcon} size={18} />
             <span>Nested folders</span>
             <strong>{stats.folderCount}</strong>
           </article>
           <article className={styles.metricCard}>
+            <File className={styles.metricIcon} size={18} />
             <span>Files indexed</span>
             <strong>{stats.fileCount}</strong>
           </article>
@@ -149,7 +183,7 @@ export default function DrivePage() {
 
       {connectionStatus === 'success' ? (
         <section className={styles.statusBar}>
-          <span className={styles.statusPill}>Connected</span>
+          <span className={styles.statusPill}><CheckCircle2 size={13} /> Connected</span>
           <p>Google Drive connected successfully. The scanned folders below are ready for review.</p>
         </section>
       ) : null}
@@ -157,11 +191,11 @@ export default function DrivePage() {
       <section className={styles.controls}>
         <div>
           <h2>Expense Folders</h2>
-          <p>Scanned Google Drive folders prepared for review.</p>
+          <p>{rootFolders.length} folder{rootFolders.length !== 1 ? 's' : ''} available</p>
         </div>
         <div className={styles.controlActions}>
           <label className={styles.searchBox}>
-            <span className={styles.searchIcon}>o</span>
+            <Search className={styles.searchIcon} size={15} />
             <input
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Search folders..."
@@ -174,15 +208,17 @@ export default function DrivePage() {
               className={viewMode === 'tiles' ? styles.viewToggleActive : ''}
               onClick={() => setViewMode('tiles')}
               type="button"
+              aria-label="Grid view"
             >
-              Tiles
+              <Grid3X3 size={15} />
             </button>
             <button
               className={viewMode === 'content' ? styles.viewToggleActive : ''}
               onClick={() => setViewMode('content')}
               type="button"
+              aria-label="List view"
             >
-              Content
+              <LayoutList size={15} />
             </button>
           </div>
         </div>
@@ -190,19 +226,26 @@ export default function DrivePage() {
 
       {viewMode === 'tiles' ? (
         <section className={styles.folderGrid}>
-          {rootFolders.map((folder) => (
+          {rootFolders.map((folder, i) => (
             <button
               className={styles.folderCard}
               key={folder.id}
               onClick={() => openFolder(folder.id)}
               type="button"
+              style={{ animationDelay: `${i * 50}ms` }}
             >
-              <span className={styles.folderIcon}>[]</span>
+              <span className={styles.folderIcon}><Folder size={20} /></span>
               <h3>{folder.name}</h3>
-              <p>{folder.children?.length ?? 0} scanned items</p>
-              <span className={styles.folderLink}>Open Folder</span>
+              <p>{folder.children?.length ?? 0} items</p>
+              <span className={styles.folderLink}>Open <ChevronRight size={14} /></span>
             </button>
           ))}
+          {rootFolders.length === 0 && (
+            <div className={styles.emptyState}>
+              <Search size={32} />
+              <p>No folders match your search.</p>
+            </div>
+          )}
         </section>
       ) : (
         <section className={styles.folderList}>
@@ -213,17 +256,20 @@ export default function DrivePage() {
               onClick={() => openFolder(folder.id)}
               type="button"
             >
-              <span className={styles.folderListIcon}>[]</span>
+              <span className={styles.folderListIcon}><Folder size={18} /></span>
               <div className={styles.folderListBody}>
                 <strong>{folder.name}</strong>
-                <span>Open folder content</span>
-              </div>
-              <div className={styles.folderListMeta}>
                 <span>{folder.children?.length ?? 0} items</span>
-                <span>Open</span>
               </div>
+              <ChevronRight size={16} className={styles.folderListArrow} />
             </button>
           ))}
+          {rootFolders.length === 0 && (
+            <div className={styles.emptyState}>
+              <Search size={32} />
+              <p>No folders match your search.</p>
+            </div>
+          )}
         </section>
       )}
     </main>
