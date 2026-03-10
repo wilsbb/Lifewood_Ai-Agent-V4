@@ -83,12 +83,12 @@ yarn-error.log*
 pnpm-debug.log*
 
 # dotenv environment variables
-.env
-.env.*.local
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# .env
+# .env.*.local
+# .env.local
+# .env.development.local
+# .env.test.local
+#.env.production.local
 
 # Parcel cache
 .cache/
