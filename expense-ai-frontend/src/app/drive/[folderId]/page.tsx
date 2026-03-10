@@ -45,6 +45,10 @@ function isImage(item: DriveItem): boolean {
   return item.mimeType.includes('image');
 }
 
+function getActionLabel(item: DriveItem): string {
+  return isFolder(item) ? 'Open folder' : 'View content';
+}
+
 function formatDate(date?: string): string {
   if (!date) return 'No activity date';
   return new Date(date).toLocaleDateString('en-US', {
@@ -388,24 +392,132 @@ export default function FolderWorkspacePage() {
                     <div className={styles.tableActions}>
                       {isFolder(item) ? (
                         <button
-                          className={styles.tableAction}
+                          aria-label={getActionLabel(item)}
+                          className={styles.iconAction}
+                          data-label={getActionLabel(item)}
                           onClick={() => router.push(`/drive/${item.id}`)}
                           type="button"
                         >
-                          Open folder
+                          <span aria-hidden="true">
+                            <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M6 3H4.75C3.7835 3 3 3.7835 3 4.75V11.25C3 12.2165 3.7835 13 4.75 13H11.25C12.2165 13 13 12.2165 13 11.25V10"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M8.5 3H13V7.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M12.5 3.5L7.5 8.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.5"
+                              />
+                            </svg>
+                          </span>
                         </button>
                       ) : (
-                        <button className={styles.tableAction} onClick={() => openPreview(item)} type="button">
-                          View content
+                        <button
+                          aria-label={getActionLabel(item)}
+                          className={styles.iconAction}
+                          data-label={getActionLabel(item)}
+                          onClick={() => openPreview(item)}
+                          type="button"
+                        >
+                          <span aria-hidden="true">
+                            <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M1.5 8C2.9 5.2 5.2 3.75 8 3.75C10.8 3.75 13.1 5.2 14.5 8C13.1 10.8 10.8 12.25 8 12.25C5.2 12.25 2.9 10.8 1.5 8Z"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.5"
+                              />
+                              <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+                            </svg>
+                          </span>
                         </button>
                       )}
                       <button
-                        className={styles.tableDeleteAction}
+                        aria-label={deletingId === item.id ? 'Deleting' : 'Delete'}
+                        className={styles.iconDeleteAction}
+                        data-label={deletingId === item.id ? 'Deleting' : 'Delete'}
                         disabled={deletingId === item.id}
                         onClick={() => handleDeleteItem(item)}
                         type="button"
                       >
-                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                        <span aria-hidden="true">
+                          {deletingId === item.id ? (
+                            <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M8 3V5.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M8 10.5V13"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M3 8H5.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M10.5 8H13"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                            </svg>
+                          ) : (
+                            <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M3.5 4.5H12.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M6 2.75H10"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M5 6V11.25C5 11.9404 5.55964 12.5 6.25 12.5H9.75C10.4404 12.5 11 11.9404 11 11.25V6"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M6.75 7.25V10.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                              <path
+                                d="M9.25 7.25V10.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeWidth="1.5"
+                              />
+                            </svg>
+                          )}
+                        </span>
                       </button>
                     </div>
                   </div>

@@ -125,11 +125,11 @@ export default function DrivePage() {
 
       <section className={styles.hero}>
         <div className={styles.heroCard}>
-          <span className={styles.badge}>Lifewood OCR Workspace</span>
+          <span className={styles.badge}>Always On Never Off</span>
           <h1>
             Good day, <em>admin</em>
           </h1>
-          <p>Choose a scanned expense folder to open its review workspace.</p>
+          <p>Choose a scanned expense folder to open its Lifewood review workspace.</p>
         </div>
         <div className={styles.heroMetrics}>
           <article className={styles.metricCard}>
@@ -157,7 +157,7 @@ export default function DrivePage() {
       <section className={styles.controls}>
         <div>
           <h2>Expense Folders</h2>
-          <p>Each card represents a scanned folder from your connected Google Drive.</p>
+          <p>Scanned Google Drive folders prepared for review.</p>
         </div>
         <div className={styles.controlActions}>
           <label className={styles.searchBox}>

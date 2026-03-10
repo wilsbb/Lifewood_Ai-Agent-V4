@@ -1,5 +1,13 @@
 :root {
   color-scheme: light;
+  --app-text: #133020;
+  --paper: #f5eedb;
+  --white: #ffffff;
+  --sea-salt: #f9f7f7;
+  --saffaron: #ffb347;
+  --earth-yellow: #ffc370;
+  --castleton-green: #046241;
+  --dark-serpent: #133020;
 }
 
 * {
@@ -12,9 +20,9 @@ html {
 
 body {
   margin: 0;
-  font-family: Manrope, "Segoe UI", sans-serif;
-  background: #fbf8f1;
-  color: #133020;
+  font-family: var(--font-manrope, Manrope), "Segoe UI", sans-serif;
+  background: var(--paper);
+  color: var(--app-text);
 }
 
 button,
@@ -22,6 +30,7 @@ input,
 select,
 textarea {
   font: inherit;
+  color: var(--app-text);
 }
 
 a {
