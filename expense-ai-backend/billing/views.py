@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Sum, Count, Avg, Min, Max
-from django.db.models.functions import TruncMonth, TruncWeek
+from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
@@ -258,7 +258,6 @@ def save_receipt(request):
     Header: X-Agent-Secret: <N8N_AGENT_SECRET>
     Body: { receipt data }
     """
-    # Verify the secret header so only n8n can call this
     agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
     request_secret = request.headers.get('X-Agent-Secret', '')
 
@@ -274,7 +273,6 @@ def save_receipt(request):
     if not drive_file_id:
         return JsonResponse({'error': 'drive_file_id is required'}, status=400)
 
-    # Find user by id if provided
     from django.contrib.auth import get_user_model
     User = get_user_model()
     user = None
@@ -294,7 +292,6 @@ def save_receipt(request):
             except ValueError:
                 pass
 
-    # Save or update receipt
     receipt, created = Receipt.objects.update_or_create(
         drive_file_id=drive_file_id,
         defaults={
@@ -346,7 +343,6 @@ def list_receipts(request):
     """
     receipts = Receipt.objects.filter(user=request.user)
 
-    # Apply filters
     category = request.GET.get('category')
     status = request.GET.get('status')
     start, end = parse_date_range(request)
@@ -363,6 +359,7 @@ def list_receipts(request):
         'document_type', 'expense_category', 'vat_type', 'status',
         'expense_date', 'total', 'vat_amount', 'department',
         'employee_name', 'receipt_number', 'tin', 'created_at',
+        'bir_permit_number',
     )
 
     return JsonResponse({
@@ -460,7 +457,6 @@ def analytics_summary(request):
     current_total = base_qs.aggregate(total=Sum('total'))['total'] or Decimal('0')
     prev_total = prev_qs.aggregate(total=Sum('total'))['total'] or Decimal('0')
 
-    # % change vs previous period
     if prev_total > 0:
         change_pct = float((current_total - prev_total) / prev_total * 100)
     else:
@@ -559,14 +555,13 @@ def analytics_trends(request):
         .values('month')
         .annotate(
             total_spend=Sum('total'),
+            total_vat=Sum('vat_amount'),
             transaction_count=Count('id'),
             avg_spend=Avg('total'),
         )
         .order_by('month')
     )
 
-    # Spend by day of week (0=Monday ... 6=Sunday)
-    from django.db.models import IntegerField
     from django.db.models.functions import ExtractWeekDay
 
     by_weekday = (
@@ -589,6 +584,7 @@ def analytics_trends(request):
             {
                 'month': row['month'].strftime('%Y-%m'),
                 'total_spend': str(row['total_spend']),
+                'total_vat': str(row['total_vat'] or 0),
                 'transaction_count': row['transaction_count'],
                 'avg_spend': str(row['avg_spend']),
             }
@@ -601,5 +597,98 @@ def analytics_trends(request):
                 'transaction_count': row['count'],
             }
             for row in by_weekday
+        ],
+    })
+
+
+# ─────────────────────────────────────────────
+# N8N PROXY ENDPOINT
+# ─────────────────────────────────────────────
+
+@csrf_exempt
+@require_POST
+def n8n_analytics_proxy(request):
+    """
+    Allows n8n to fetch all analytics in one call using the agent secret
+    instead of a session cookie — avoids expiry issues with long-running workflows.
+
+    POST /api/billing/n8n/analytics/
+    Header: X-Agent-Secret: <N8N_AGENT_SECRET>
+    Body: { "user_id": 1 }
+    """
+    agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
+    request_secret = request.headers.get('X-Agent-Secret', '')
+
+    if agent_secret and request_secret != agent_secret:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        body = {}
+
+    user_id = body.get('user_id')
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    user = User.objects.filter(id=user_id).first()
+
+    if not user:
+        return JsonResponse({'error': 'User not found'}, status=404)
+
+    today = timezone.now().date()
+    start = today.replace(day=1)
+
+    base_qs = Receipt.objects.filter(
+        user=user,
+        status='processed',
+        expense_date__range=[start, today],
+    )
+
+    summary = base_qs.aggregate(
+        total_spend=Sum('total'),
+        total_vat=Sum('vat_amount'),
+        transaction_count=Count('id'),
+        avg_transaction=Avg('total'),
+    )
+
+    categories = list(
+        base_qs
+        .values('expense_category')
+        .annotate(total=Sum('total'), count=Count('id'))
+        .order_by('-total')
+    )
+
+    recent_receipts = list(
+        Receipt.objects
+        .filter(user=user, status='processed')
+        .order_by('-expense_date')[:20]
+        .values(
+            'business_name', 'expense_category', 'document_type',
+            'total', 'vat_amount', 'expense_date', 'description',
+            'tin', 'receipt_number', 'vat_type',
+        )
+    )
+
+    return JsonResponse({
+        'summary': {
+            'total_spend': str(summary['total_spend'] or 0),
+            'total_vat': str(summary['total_vat'] or 0),
+            'transaction_count': summary['transaction_count'] or 0,
+            'avg_transaction': str(summary['avg_transaction'] or 0),
+            'period_start': start.isoformat(),
+            'period_end': today.isoformat(),
+        },
+        'by_category': [
+            {**c, 'total': str(c['total'])}
+            for c in categories
+        ],
+        'recent_receipts': [
+            {
+                **r,
+                'expense_date': r['expense_date'].isoformat() if r['expense_date'] else None,
+                'total': str(r['total']),
+                'vat_amount': str(r['vat_amount']),
+            }
+            for r in recent_receipts
         ],
     })

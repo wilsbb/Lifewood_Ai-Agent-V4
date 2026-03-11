@@ -82,9 +82,9 @@ export default function CategoryChart({ categories, loading }) {
 
   const data = (categories || [])
     .map((c, i) => ({
-      name: CATEGORY_LABELS[c.expense_category] || c.expense_category,
-      value: parseFloat(c.total || 0),
-      count: c.count || 0,
+      name: CATEGORY_LABELS[c.category] || c.category,
+      value: parseFloat(c.total_spend || 0),
+      count: c.transaction_count || 0,
       fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
       pct: total > 0 ? ((parseFloat(c.total) / total) * 100).toFixed(1) : '0.0',
     }))

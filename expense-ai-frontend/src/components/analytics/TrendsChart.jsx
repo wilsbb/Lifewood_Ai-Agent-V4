@@ -57,12 +57,15 @@ export default function TrendsChart({ trends, loading }) {
     </div>
   );
 
-  const monthly = trends?.monthly || [];
-  const data = monthly.map((m) => ({
-    month: MONTH_ABBR[(m.month || 1) - 1],
-    total: parseFloat(m.total || 0),
-    vat: parseFloat(m.vat || 0),
-  }));
+  const monthly = trends?.monthly_trend || [];
+  const data = monthly.map((m) => {
+    const [year, month] = (m.month || '2026-01').split('-');
+    return {
+      month: MONTH_ABBR[(parseInt(month) || 1) - 1],
+      total: parseFloat(m.total_spend || 0),
+      vat: 0, // not returned per-month by the API — remove the VAT area or add to Django
+    };
+  });
 
   if (data.length === 0) return (
     <div style={cardStyle}>
