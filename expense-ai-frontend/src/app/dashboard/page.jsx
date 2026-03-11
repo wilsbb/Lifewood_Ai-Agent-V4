@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import SpendSummaryCards from '../components/analytics/SpendSummaryCards';
-import CategoryChart     from '../components/analytics/CategoryChart';
-import TrendsChart       from '../components/analytics/TrendsChart';
-import RecentReceipts    from '../components/analytics/RecentReceipts';
-import ComplianceAlerts  from '../components/analytics/ComplianceAlerts';
-import ChatPanel         from '../components/chat/ChatPanel';
+import SpendSummaryCards from '../../components/analytics/SpendSummaryCards';
+import CategoryChart     from '../../components/analytics/CategoryChart';
+import TrendsChart       from '../../components/analytics/TrendsChart';
+import RecentReceipts    from '../../components/analytics/RecentReceipts';
+import ComplianceAlerts  from '../../components/analytics/ComplianceAlerts';
+import ChatPanel         from '../../components/chat/ChatPanel';
 import {
   fetchSummary, fetchCategories, fetchTrends, fetchReceipts,
-} from '../lib/api';
+} from '../../lib/api';
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 const PAGE = {
@@ -88,7 +88,7 @@ export default function Dashboard() {
         fetchReceipts({ limit: 50 }),
       ]);
       setSummary(s);
-      setCategories(c.categories || c || []);
+      setCategories(c.by_category || []);
       setTrends(t);
       setReceipts(r.receipts || r || []);
       setLastRefresh(new Date());

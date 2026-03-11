@@ -16,4 +16,6 @@ urlpatterns = [
     path('analytics/summary/', views.analytics_summary, name='analytics_summary'),
     path('analytics/trends/', views.analytics_trends, name='analytics_trends'),
     path('analytics/by-category/', views.analytics_by_category, name='analytics_by_category'),
+
+    path('n8n/analytics/', views.n8n_analytics_proxy, name='n8n_analytics_proxy'),
 ]

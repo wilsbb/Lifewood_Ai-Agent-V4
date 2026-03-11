@@ -59,9 +59,9 @@ export default function SpendSummaryCards({ summary, loading }) {
   const totalVat        = parseFloat(summary?.total_vat || 0);
   const txCount         = summary?.transaction_count || 0;
   const avgTx           = parseFloat(summary?.avg_transaction || 0);
-  const pctChange       = prevSpend > 0 ? ((totalSpend - prevSpend) / prevSpend) * 100 : null;
-  const changeColor     = pctChange === null ? '#9ca3af' : pctChange <= 0 ? '#10b981' : '#ef4444';
-  const changeLabel     = pctChange === null ? '—' : `${pctChange > 0 ? '+' : ''}${pctChange.toFixed(1)}% vs last month`;
+  const pctChange = summary?.vs_previous_period?.change_pct ?? null;
+  const changeColor = pctChange === null ? '#9ca3af' : pctChange <= 0 ? '#10b981' : '#ef4444';
+  const changeLabel = pctChange === null ? '—' : `${pctChange > 0 ? '+' : ''}${pctChange.toFixed(1)}% vs last month`;
 
   const cards = [
     {
