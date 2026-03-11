@@ -149,4 +149,7 @@ reports/
 # Google Credintials files
 credentials.json
 
+# N8N Environment variable files
+n8n/.env
+*.env
 # End of .gitignore

@@ -1,0 +1,112 @@
+{
+  "name": "Lifewood Chat Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lifewood-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "code": "const body = $input.first().json.body || $input.first().json;\n\nreturn [{\n  json: {\n    message: body.message || '',\n    conversation_id: body.conversation_id,\n    user_id: body.user_id,\n    user_email: body.user_email || '',\n    history: body.history || [],\n  }\n}];"
+      },
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DJANGO_API_URL }}/api/billing/analytics/summary/",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Cookie", "value": "={{ $env.DJANGO_SESSION_COOKIE }}" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Analytics Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DJANGO_API_URL }}/api/billing/analytics/by-category/",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Cookie", "value": "={{ $env.DJANGO_SESSION_COOKIE }}" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Category Breakdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 380]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DJANGO_API_URL }}/api/billing/analytics/trends/",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Cookie", "value": "={{ $env.DJANGO_SESSION_COOKIE }}" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 560]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are Lifewood Expense AI, an intelligent financial assistant specializing in Philippine business expense management and BIR compliance.\n\nYou have access to the following real-time data:\n\nSPENDING SUMMARY (current month):\n{{ JSON.stringify($('Fetch Analytics Summary').first().json, null, 2) }}\n\nSPEND BY CATEGORY:\n{{ JSON.stringify($('Fetch Category Breakdown').first().json, null, 2) }}\n\nMONTHLY TRENDS (12 months):\n{{ JSON.stringify($('Fetch Trends').first().json, null, 2) }}\n\nCONVERSATION HISTORY:\n{{ $('Parse Input').first().json.history.map(m => m.role.toUpperCase() + ': ' + m.content).join('\\n') }}\n\nGUIDELINES:\n- All amounts are in Philippine Peso (₱)\n- You understand BIR regulations including EOPT Act / RA 11976 (effective Jan 2024)\n- You know the difference between Invoices and Official Receipts under the new law\n- You understand VAT-registered vs Non-VAT businesses\n- You can explain BIR compliance issues found in receipts\n- Be concise but thorough\n- Format numbers with ₱ and commas (e.g. ₱12,450.00)\n- When showing trends, highlight notable spikes or drops\n- Remember all previous conversations — you have full memory of this user's history\n- If asked about a specific receipt or file, mention you can process it if they share the filename"
+            },
+            {
+              "role": "user",
+              "content": "={{ $('Parse Input').first().json.message }}"
+            }
+          ]
+        }
+      },
+      "name": "AI Agent (GPT-4o)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "position": [960, 380]
+    },
+    {
+      "parameters": {
+        "code": "const reply = $('AI Agent (GPT-4o)').first().json;\nconst replyText = typeof reply === 'string' ? reply : (reply.text || reply.content || JSON.stringify(reply));\n\nreturn [{\n  json: {\n    reply: replyText,\n    metadata: {\n      model: 'gpt-4o',\n      processed_at: new Date().toISOString(),\n    }\n  }\n}];"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "position": [1200, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1440, 380]
+    }
+  ],
+  "connections": {
+    "Chat Webhook": { "main": [[{ "node": "Parse Input", "type": "main", "index": 0 }]] },
+    "Parse Input": { "main": [[{ "node": "Fetch Analytics Summary", "type": "main", "index": 0 }, { "node": "Fetch Category Breakdown", "type": "main", "index": 0 }, { "node": "Fetch Trends", "type": "main", "index": 0 }]] },
+    "Fetch Analytics Summary": { "main": [[{ "node": "AI Agent (GPT-4o)", "type": "main", "index": 0 }]] },
+    "Fetch Category Breakdown": { "main": [[{ "node": "AI Agent (GPT-4o)", "type": "main", "index": 0 }]] },
+    "Fetch Trends": { "main": [[{ "node": "AI Agent (GPT-4o)", "type": "main", "index": 0 }]] },
+    "AI Agent (GPT-4o)": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Return Response", "type": "main", "index": 0 }]] }
+  }
+}
