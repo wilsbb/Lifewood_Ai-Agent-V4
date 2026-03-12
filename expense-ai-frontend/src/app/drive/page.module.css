@@ -121,7 +121,8 @@
   border-radius: 999px;
   background: var(--dark-serpent);
   box-shadow: 0 2px 8px rgba(15, 38, 26, 0.18), inset 0 1px 0 rgba(255,255,255,0.06);
-  cursor: default;
+  cursor: pointer;
+  text-decoration: none;
   transition: box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
 }
 

@@ -230,11 +230,16 @@ export default function DrivePage() {
 
         {/* ── Centre nav ── */}
         <nav className={styles.topbarNav}>
-          <div className={styles.navPill}>
+          <a
+            className={styles.navPill}
+            href="https://peaceful-gentleness-production-181e.up.railway.app/dashboard"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
             <LayoutDashboard className={styles.navIcon} size={14} />
             <span className={styles.navLabel}>Dashboard</span>
             <span className={styles.navActiveDot} aria-hidden="true" />
-          </div>
+          </a>
         </nav>
 
         {/* ── Actions ── */}
