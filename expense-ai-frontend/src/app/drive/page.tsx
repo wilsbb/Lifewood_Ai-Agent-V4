@@ -255,12 +255,7 @@ export default function DrivePage() {
       {/* ── Hero banner ── */}
       <section className={styles.heroBanner}>
         <div className={styles.heroBannerLeft}>
-          <div className={styles.heroTicker} aria-label="Always on never off">
-            <div className={styles.heroTickerTrack}>
-              <span>Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
-              <span aria-hidden="true">Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
-            </div>
-          </div>
+          <span className={styles.heroTagline}>ALWAYS ON NEVER OFF</span>
           <h1 className={`${styles.greetingText} ${animClass === 'splitIn' ? styles.splitIn : styles.splitOut}`}>
             {greeting}
           </h1>

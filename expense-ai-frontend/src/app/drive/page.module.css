@@ -261,33 +261,16 @@
   min-width: 180px;
 }
 
-.heroTicker {
-  position: relative;
-  z-index: 1;
+.heroTagline {
+  display: block;
   width: 100%;
-  overflow: hidden;
-  border-radius: 999px;
-  border: 1px solid rgba(247, 190, 104, 0.4);
-  background: rgba(247, 190, 104, 0.1);
-}
-
-.heroTickerTrack {
-  display: flex;
-  gap: 0;
-  width: max-content;
+  text-align: center;
   padding: 6px 0;
-  animation: tickerScroll 16s linear infinite;
-  will-change: transform;
-}
-
-.heroTickerTrack span {
-  flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.88);
-  font-size: 0.65rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .heroBanner h1 {
