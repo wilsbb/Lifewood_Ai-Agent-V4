@@ -138,7 +138,7 @@ def send_message(request):
             n8n_response = http_requests.post(
                 N8N_WEBHOOK_URL,
                 json=n8n_payload,
-                timeout=60,
+                timeout=25,
             )
             n8n_response.raise_for_status()
             n8n_data = n8n_response.json()
