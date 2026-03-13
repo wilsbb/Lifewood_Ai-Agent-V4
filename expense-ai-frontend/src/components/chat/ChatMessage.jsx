@@ -117,7 +117,6 @@ export default function ChatMessage({ role, content, timestamp, error = false, r
   const isAgent = role === 'agent';
 
   const bubbleStyle = {
-    maxWidth: '85%',
     padding: '10px 14px',
     borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
     background: error
@@ -145,7 +144,7 @@ export default function ChatMessage({ role, content, timestamp, error = false, r
       alignItems: isUser ? 'flex-end' : 'flex-start',
       gap: '2px',
     }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
         {isAgent && <Avatar role="agent" />}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '85%' }}>
