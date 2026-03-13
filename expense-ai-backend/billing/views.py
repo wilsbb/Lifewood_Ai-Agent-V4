@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Sum, Count, Avg, Min, Max
+from django.db.models import Sum, Count, Avg, Min, Max, Q
 from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -22,13 +22,20 @@ N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL', '')
 # ─────────────────────────────────────────────
 
 def require_auth(func):
-    """Simple decorator — returns 401 if user is not authenticated."""
+    """Returns 401 if user is not authenticated."""
     def wrapper(request, *args, **kwargs):
         if not request.user or not request.user.is_authenticated:
             return JsonResponse({'error': 'Not authenticated'}, status=401)
         return func(request, *args, **kwargs)
     wrapper.__name__ = func.__name__
     return wrapper
+
+
+def _is_n8n_request(request):
+    """Check if request is authenticated via X-Agent-Secret header."""
+    agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
+    request_secret = request.headers.get('X-Agent-Secret', '')
+    return bool(agent_secret and request_secret == agent_secret)
 
 
 def parse_date_range(request):
@@ -89,7 +96,6 @@ def send_message(request):
         except Conversation.DoesNotExist:
             return JsonResponse({'error': 'Conversation not found'}, status=404)
     else:
-        # Auto-generate title from first 60 chars of first message
         title = user_message[:60] + ('...' if len(user_message) > 60 else '')
         conversation = Conversation.objects.create(
             user=request.user,
@@ -103,7 +109,7 @@ def send_message(request):
         content=user_message,
     )
 
-    # Build full conversation history to send to n8n for memory
+    # Build full conversation history
     history = list(
         conversation.messages
         .exclude(id=user_chat_message.id)
@@ -111,7 +117,6 @@ def send_message(request):
         .order_by('created_at')
     )
 
-    # Format history for the agent
     formatted_history = [
         {
             'role': msg['role'],
@@ -166,7 +171,6 @@ def send_message(request):
         metadata=agent_metadata,
     )
 
-    # Update conversation timestamp
     conversation.save()
 
     return JsonResponse({
@@ -244,6 +248,77 @@ def list_conversations(request):
 
 
 # ─────────────────────────────────────────────
+# MEMORY ENDPOINT  (NEW)
+# ─────────────────────────────────────────────
+
+@csrf_exempt
+@require_GET
+def chat_memory(request):
+    """
+    Returns relevant past messages scoped strictly to ONE user.
+    n8n can call this with X-Agent-Secret + user_id param.
+    Frontend users can call this with session auth (own messages only).
+
+    Privacy guarantee: a user can NEVER retrieve another user's messages.
+    n8n passes user_id so the agent can recall history for the active user,
+    but that user_id scope is enforced here — not in n8n.
+
+    GET /api/billing/chat/memory/?query=vat+receipts&limit=8&user_id=1
+    Header: X-Agent-Secret (for n8n) OR session cookie (for frontend)
+    """
+    if _is_n8n_request(request):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user_id = request.GET.get('user_id')
+        if not user_id:
+            return JsonResponse({'error': 'user_id is required for agent requests'}, status=400)
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return JsonResponse({'error': 'User not found'}, status=404)
+    elif request.user and request.user.is_authenticated:
+        user = request.user
+    else:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    query = request.GET.get('query', '').strip()
+    limit = min(int(request.GET.get('limit', 8)), 20)
+
+    # Always scoped to this user only
+    base_qs = (
+        ChatMessage.objects
+        .filter(conversation__user=user)
+        .select_related('conversation')
+        .order_by('-created_at')
+    )
+
+    if query:
+        # Search across both user questions and agent replies
+        base_qs = base_qs.filter(
+            Q(content__icontains=query)
+        )
+
+    messages_page = base_qs[:limit]
+
+    return JsonResponse({
+        'user_id': user.id,
+        'query': query,
+        'memories': [
+            {
+                'id': m.id,
+                'role': m.role,
+                # Truncate very long messages so the agent prompt stays lean
+                'content': m.content[:600] + ('...' if len(m.content) > 600 else ''),
+                'conversation_id': m.conversation_id,
+                'conversation_title': m.conversation.title,
+                'created_at': m.created_at.isoformat(),
+            }
+            for m in messages_page
+        ],
+        'total_found': base_qs.count(),
+    })
+
+
+# ─────────────────────────────────────────────
 # RECEIPT ENDPOINTS
 # ─────────────────────────────────────────────
 
@@ -252,16 +327,11 @@ def list_conversations(request):
 def save_receipt(request):
     """
     Called by n8n after OCR processing to save extracted receipt data.
-    Uses a shared secret for authentication instead of session cookies.
 
     POST /api/billing/receipts/save/
     Header: X-Agent-Secret: <N8N_AGENT_SECRET>
-    Body: { receipt data }
     """
-    agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
-    request_secret = request.headers.get('X-Agent-Secret', '')
-
-    if agent_secret and request_secret != agent_secret:
+    if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
     try:
@@ -284,13 +354,12 @@ def save_receipt(request):
     expense_date = None
     date_str = body.get('expense_date')
     if date_str:
-        try:
-            expense_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
+        for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y'):
             try:
-                expense_date = datetime.strptime(date_str, '%m/%d/%Y').date()
+                expense_date = datetime.strptime(date_str, fmt).date()
+                break
             except ValueError:
-                pass
+                continue
 
     receipt, created = Receipt.objects.update_or_create(
         drive_file_id=drive_file_id,
@@ -335,19 +404,13 @@ def save_receipt(request):
 @require_GET
 def list_receipts(request):
     """
-    Returns all receipts. Accepts session auth (frontend) or X-Agent-Secret (n8n).
+    Returns receipts. Session auth = own receipts. Agent secret = all receipts.
 
     GET /api/billing/receipts/
     """
-    agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
-    request_secret = request.headers.get('X-Agent-Secret', '')
-    is_n8n = agent_secret and request_secret == agent_secret
-
-    if is_n8n:
-        # n8n: return all receipts across all users
+    if _is_n8n_request(request):
         receipts = Receipt.objects.all()
     elif request.user and request.user.is_authenticated:
-        # Frontend: return only this user's receipts
         receipts = Receipt.objects.filter(user=request.user)
     else:
         return JsonResponse({'error': 'Not authenticated'}, status=401)
@@ -382,6 +445,7 @@ def list_receipts(request):
         ],
         'total_count': receipts.count(),
     })
+
 
 @require_GET
 @require_auth
@@ -430,6 +494,26 @@ def get_receipt(request, receipt_id):
     })
 
 
+@require_GET
+def list_processed_file_ids(request):
+    """
+    Returns all drive_file_ids that have already been OCR'd and saved.
+    Used by n8n OCR poller to skip already-processed files efficiently.
+
+    GET /api/billing/receipts/processed-ids/
+    Header: X-Agent-Secret: <secret>
+    """
+    if not _is_n8n_request(request):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    file_ids = list(Receipt.objects.values_list('drive_file_id', flat=True))
+
+    return JsonResponse({
+        'processed_file_ids': file_ids,
+        'count': len(file_ids),
+    })
+
+
 # ─────────────────────────────────────────────
 # ANALYTICS ENDPOINTS
 # ─────────────────────────────────────────────
@@ -451,7 +535,6 @@ def analytics_summary(request):
         expense_date__range=[start, end],
     )
 
-    # Previous period (same duration)
     duration = (end - start).days
     prev_end = start - timedelta(days=1)
     prev_start = prev_end - timedelta(days=duration)
@@ -617,17 +700,13 @@ def analytics_trends(request):
 @require_POST
 def n8n_analytics_proxy(request):
     """
-    Allows n8n to fetch all analytics in one call using the agent secret
-    instead of a session cookie — avoids expiry issues with long-running workflows.
+    Allows n8n to fetch all analytics in one call using the agent secret.
 
     POST /api/billing/n8n/analytics/
     Header: X-Agent-Secret: <N8N_AGENT_SECRET>
     Body: { "user_id": 1 }
     """
-    agent_secret = os.environ.get('N8N_AGENT_SECRET', '')
-    request_secret = request.headers.get('X-Agent-Secret', '')
-
-    if agent_secret and request_secret != agent_secret:
+    if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
     try:
@@ -652,6 +731,15 @@ def n8n_analytics_proxy(request):
         expense_date__range=[start, today],
     )
 
+    # Previous month for comparison
+    prev_end = start - timedelta(days=1)
+    prev_start = prev_end.replace(day=1)
+    prev_total = Receipt.objects.filter(
+        user=user,
+        status='processed',
+        expense_date__range=[prev_start, prev_end],
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0')
+
     summary = base_qs.aggregate(
         total_spend=Sum('total'),
         total_vat=Sum('vat_amount'),
@@ -673,18 +761,27 @@ def n8n_analytics_proxy(request):
         .values(
             'business_name', 'expense_category', 'document_type',
             'total', 'vat_amount', 'expense_date', 'description',
-            'tin', 'receipt_number', 'vat_type',
+            'tin', 'receipt_number', 'vat_type', 'bir_permit_number',
         )
     )
 
+    current_total = summary['total_spend'] or Decimal('0')
+    change_pct = 0.0
+    if prev_total > 0:
+        change_pct = float((current_total - prev_total) / prev_total * 100)
+
     return JsonResponse({
         'summary': {
-            'total_spend': str(summary['total_spend'] or 0),
+            'total_spend': str(current_total),
             'total_vat': str(summary['total_vat'] or 0),
             'transaction_count': summary['transaction_count'] or 0,
             'avg_transaction': str(summary['avg_transaction'] or 0),
             'period_start': start.isoformat(),
             'period_end': today.isoformat(),
+            'vs_prev_month': {
+                'previous_total': str(prev_total),
+                'change_pct': round(change_pct, 2),
+            },
         },
         'by_category': [
             {**c, 'total': str(c['total'])}

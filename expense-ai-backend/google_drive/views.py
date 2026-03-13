@@ -78,9 +78,9 @@ def google_drive_auth(request):
         access_type='offline',
         prompt='consent',
     )
+    # Store state only — no PKCE code_verifier
     request.session['google_oauth_state'] = state
-    request.session['google_oauth_code_verifier'] = getattr(flow, 'code_verifier', None)
-    request.session['state'] = state
+    request.session.save()
     return redirect(authorization_url)
 
 
@@ -128,17 +128,15 @@ def _get_or_create_google_user(creds):
     )
     return user
 
-
 def oauth2callback(request):
-    saved_state = request.session.get('google_oauth_state') or request.GET.get('state')
-    saved_verifier = request.session.get('google_oauth_code_verifier')
+    state = request.session.get('google_oauth_state') or request.GET.get('state')
 
     flow = Flow.from_client_secrets_file(
         _get_client_secrets_file(),
         scopes=SCOPES,
         redirect_uri=OAUTH_REDIRECT_URI,
-        state=saved_state,
-        code_verifier=saved_verifier,
+        state=state,
+        # NO code_verifier here — this was causing "Malformed auth code"
     )
 
     try:
@@ -179,7 +177,6 @@ def oauth2callback(request):
         return redirect(f'{FRONTEND_URL}?error=token_save_failed')
 
     return redirect(f'{FRONTEND_URL}/drive?status=success')
-
 
 def list_drive_files(request):
     # Allow n8n background worker to use stored credentials

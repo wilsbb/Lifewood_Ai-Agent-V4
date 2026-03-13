@@ -1,22 +1,17 @@
+'use client';
+
 import { formatPeso } from '../../lib/api';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Converts plain text with basic markdown-ish patterns into styled spans.
- * Handles: **bold**, `code`, bullet lines (- or •), ₱ amounts highlighted.
- */
 function renderContent(text) {
   if (!text) return null;
 
   return text.split('\n').map((line, li) => {
-    const isBullet = /^(\s*[-•*]\s)/.test(line);
+    const isBullet = /^\s*[-*]\s/.test(line);
     const parts = [];
-    let remaining = isBullet ? line.replace(/^(\s*[-•*]\s)/, '') : line;
+    let remaining = isBullet ? line.replace(/^\s*[-*]\s/, '') : line;
     let key = 0;
 
-    // Process inline patterns
-    const pattern = /(\*\*(.+?)\*\*|`([^`]+)`|₱[\d,]+(\.\d{2})?)/g;
+    const pattern = /(\*\*(.+?)\*\*|`([^`]+)`|PHP\s?[\d,]+(\.\d{2})?)/g;
     let last = 0;
     let match;
 
@@ -26,29 +21,29 @@ function renderContent(text) {
       }
       if (match[0].startsWith('**')) {
         parts.push(
-          <strong key={key++} style={{ color: '#f9fafb', fontWeight: 700 }}>
+          <strong key={key++} style={{ color: 'var(--lw-text)', fontWeight: 700 }}>
             {match[2]}
           </strong>
         );
       } else if (match[0].startsWith('`')) {
         parts.push(
           <code key={key++} style={{
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'Manrope', sans-serif",
             fontSize: '11px',
-            background: 'rgba(245,158,11,0.15)',
-            color: '#f59e0b',
+            background: 'rgba(255,179,71,0.2)',
+            color: 'var(--lw-dark)',
             padding: '1px 5px',
-            borderRadius: '4px',
+            borderRadius: '5px',
           }}>
             {match[3]}
           </code>
         );
-      } else if (match[0].startsWith('₱')) {
+      } else if (match[0].startsWith('PHP')) {
         parts.push(
           <span key={key++} style={{
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'Manrope', sans-serif",
             fontWeight: 700,
-            color: '#f59e0b',
+            color: 'var(--lw-accent-deep)',
           }}>
             {match[0]}
           </span>
@@ -72,7 +67,7 @@ function renderContent(text) {
         }}
       >
         {isBullet && (
-          <span style={{ color: '#f59e0b', flexShrink: 0, marginTop: '1px', fontSize: '10px' }}>▸</span>
+          <span style={{ color: 'var(--lw-accent-deep)', flexShrink: 0, marginTop: '1px', fontSize: '10px' }}>-</span>
         )}
         <span>{parts}</span>
       </div>
@@ -80,16 +75,15 @@ function renderContent(text) {
   });
 }
 
-// ── Timestamp ─────────────────────────────────────────────────────────────────
 function Timestamp({ ts }) {
   if (!ts) return null;
   const d = new Date(ts);
   const time = d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
   return (
     <div style={{
-      fontFamily: "'Syne', sans-serif",
+      fontFamily: "'Manrope', sans-serif",
       fontSize: '10px',
-      color: '#4b5563',
+      color: 'var(--lw-muted)',
       marginTop: '4px',
       textAlign: 'right',
     }}>
@@ -98,7 +92,6 @@ function Timestamp({ ts }) {
   );
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ role }) {
   if (role === 'user') return null;
   return (
@@ -106,54 +99,56 @@ function Avatar({ role }) {
       width: '28px',
       height: '28px',
       borderRadius: '50%',
-      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+      background: 'var(--lw-accent)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: '13px',
+      fontSize: '10px',
       flexShrink: 0,
       alignSelf: 'flex-end',
+      color: 'var(--lw-dark)',
+      fontWeight: 700,
     }}>
-      🤖
+      AI
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-
-/**
- * ChatMessage
- *
- * Props:
- *   role       'user' | 'agent'
- *   content    string
- *   timestamp  ISO string or Date (optional)
- *   error      boolean (optional) — renders error styling
- *   receipts   array (optional) — linked receipt chips
- */
 export default function ChatMessage({ role, content, timestamp, error = false, receipts = [] }) {
   const isUser  = role === 'user';
   const isAgent = role === 'agent';
 
   const bubbleStyle = {
-    maxWidth: '85%',
+<<<<<<< HEAD
+    display: 'inline-flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    width: 'fit-content',
+    minWidth: isUser ? '64px' : '56px',
+    maxWidth: 'min(85%, 420px)',
+=======
+>>>>>>> 46ee45b76523536914444844671d78a9e3cafb70
     padding: '10px 14px',
     borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
     background: error
-      ? 'rgba(239,68,68,0.12)'
+      ? 'rgba(193,113,16,0.12)'
       : isUser
-        ? 'linear-gradient(135deg, #f59e0b, #d97706)'
-        : '#111827',
+        ? 'var(--lw-accent)'
+        : 'var(--lw-surface-alt)',
     border: error
-      ? '1px solid rgba(239,68,68,0.3)'
+      ? '1px solid rgba(193,113,16,0.3)'
       : isAgent
-        ? '1px solid #1f2937'
+        ? '1px solid var(--glass-border)'
         : 'none',
-    color: isUser && !error ? '#0a0e1a' : '#f9fafb',
-    fontFamily: "'Syne', sans-serif",
+    color: 'var(--lw-dark)',
+    fontFamily: "'Manrope', sans-serif",
     fontSize: '13px',
     lineHeight: 1.6,
-    wordBreak: 'break-word',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'normal',
+    overflowWrap: 'anywhere',
+    textAlign: 'left',
+    boxShadow: isUser ? '0 6px 14px rgba(255,179,71,0.25)' : 'none',
   };
 
   return (
@@ -162,36 +157,52 @@ export default function ChatMessage({ role, content, timestamp, error = false, r
       flexDirection: 'column',
       alignItems: isUser ? 'flex-end' : 'flex-start',
       gap: '2px',
+      width: '100%',
     }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+<<<<<<< HEAD
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'flex-end',
+        width: '100%',
+        justifyContent: isUser ? 'flex-end' : 'flex-start',
+      }}>
+=======
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+>>>>>>> 46ee45b76523536914444844671d78a9e3cafb70
         {isAgent && <Avatar role="agent" />}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '85%' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          maxWidth: isUser ? '85%' : '100%',
+          alignItems: isUser ? 'flex-end' : 'flex-start',
+        }}>
           <div style={bubbleStyle}>
             {error && (
-              <div style={{ marginBottom: '4px', fontSize: '12px', color: '#f87171' }}>
-                ⚠️ Error
+              <div style={{ marginBottom: '4px', fontSize: '12px', color: '#C17110' }}>
+                Error
               </div>
             )}
             {renderContent(content)}
           </div>
 
-          {/* Linked receipt chips */}
           {receipts.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', paddingLeft: '2px' }}>
               {receipts.map((r, i) => (
                 <span key={i} style={{
-                  background: '#1f2937',
-                  border: '1px solid #374151',
+                  background: 'var(--lw-sea-salt)',
+                  border: '1px solid var(--lw-border)',
                   borderRadius: '6px',
                   padding: '2px 8px',
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'Manrope', sans-serif",
                   fontSize: '10px',
-                  color: '#9ca3af',
+                  color: 'var(--lw-muted)',
                   cursor: 'default',
                 }}>
-                  🧾 {r.business_name || `Receipt #${r.id}`}
-                  {r.total ? ` · ₱${parseFloat(r.total).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : ''}
+                  Receipt {r.business_name || `#${r.id}`}
+                  {r.total ? ` - ${formatPeso(parseFloat(r.total))}` : ''}
                 </span>
               ))}
             </div>

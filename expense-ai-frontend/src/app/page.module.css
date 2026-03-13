@@ -18,50 +18,44 @@
   flex-direction: column;
   width: 100%;
   background: var(--white);
-  padding: 20px 20px;
+  padding: 24px 20px;
 }
 
 @media (min-width: 640px) {
   .leftPanel {
-    padding: 28px 36px;
+    padding: 32px 40px;
   }
 }
 
 @media (min-width: 1024px) {
   .leftPanel {
-    width: 48%;
+    width: 50%;
     flex-shrink: 0;
     min-height: 100vh;
-    padding: 32px 48px;
+    padding: 40px 56px;
   }
 }
 
 @media (min-width: 1280px) {
   .leftPanel {
-    padding: 36px 64px;
+    padding: 40px 80px;
   }
 }
 
 /* Logo */
 .logoWrap {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
   animation: fadeUp 0.4s ease both;
 }
 
-@media (min-width: 1024px) {
-  .logoWrap {
-    text-align: center;
-  }
-}
-
 .logo {
-  height: 32px;
+  height: 36px;
   width: auto;
 }
 
 @media (min-width: 640px) {
   .logo {
-    height: 40px;
+    height: 44px;
   }
 }
 
@@ -71,17 +65,13 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-self: center;
-  align-items: center;
-  text-align: center;
-  max-width: 480px;
-  width: 100%;
+  max-width: 520px;
   animation: fadeUp 0.4s 80ms ease both;
 }
 
 .kicker {
   display: inline-block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: rgba(19, 48, 32, 0.55);
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -90,27 +80,26 @@
 }
 
 .heading {
-  margin: 0 0 14px;
-  font-size: clamp(2rem, 4.5vw, 3.4rem);
-  line-height: 1.02;
+  margin: 0 0 12px;
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
+  line-height: 0.96;
   letter-spacing: -0.04em;
   color: var(--dark-serpent);
   font-weight: 800;
 }
 
 .desc {
-  margin: 0 auto;
-  max-width: 34ch;
-  color: rgba(19, 48, 32, 0.65);
+  margin: 0;
+  max-width: 32ch;
+  color: rgba(19, 48, 32, 0.68);
   line-height: 1.55;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  justify-content: center;
   margin-top: 28px;
 }
 
@@ -119,15 +108,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
-  padding: 0 24px;
-  border-radius: 12px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 14px;
   text-decoration: none;
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  font-size: 0.92rem;
-  transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
+  font-size: 0.96rem;
+  transition: opacity 0.15s, transform 0.1s;
 }
 
 .primaryButton:active,
@@ -142,29 +131,20 @@
   box-shadow: 0 10px 20px rgba(255, 179, 71, 0.25);
 }
 
-.primaryButton:hover {
-  box-shadow: 0 12px 24px rgba(255, 179, 71, 0.35);
-}
-
 .secondaryButton {
   border: 1px solid rgba(4, 98, 65, 0.14);
   background: transparent;
   color: var(--castleton-green);
 }
 
-.secondaryButton:hover {
-  background: rgba(4, 98, 65, 0.04);
-  border-color: rgba(4, 98, 65, 0.2);
-}
-
 /* Footer */
 .footer {
-  margin-top: 16px;
+  margin-top: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.68rem;
-  color: rgba(19, 48, 32, 0.38);
+  font-size: 0.69rem;
+  color: rgba(19, 48, 32, 0.4);
   letter-spacing: 0.04em;
   animation: fadeUp 0.4s 200ms ease both;
 }
@@ -180,13 +160,13 @@
   position: relative;
   overflow: hidden;
   background: var(--dark-serpent);
-  min-height: 280px;
+  min-height: 320px;
   flex: 1;
 }
 
 @media (min-width: 640px) {
   .rightPanel {
-    min-height: 340px;
+    min-height: 380px;
   }
 }
 
@@ -203,11 +183,6 @@
   background-size: cover;
   background-position: center;
   filter: brightness(0.42);
-  transition: transform 0.3s ease;
-}
-
-.rightPanel:hover .bgImage {
-  transform: scale(1.02);
 }
 
 .overlay {
@@ -229,63 +204,77 @@
 
 @media (min-width: 1024px) {
   .overlay {
-    padding: 36px 44px;
+    padding: 40px;
     min-height: 100vh;
   }
 }
 
 /* Hero badge */
 .heroBadge {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  justify-content: center;
+  width: min(92%, 760px);
+  max-width: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  padding: 8px 16px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  padding: 8px 34px;
+  font-size: 25pt;
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  align-self: flex-start;
+  text-align: center;
   animation: fadeUp 0.4s ease both;
+}
+
+.heroBadgeAlwaysOn {
+  color: #FFB347;
+  position: relative;
+  top: 3px;
+  animation: mottoFloat 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.heroBadgeNeverOff {
+  color: #046241;
+  position: relative;
+  top: 3px;
+  animation: mottoFloat 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.18s infinite;
 }
 
 /* Hero text */
 .heroText {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   animation: fadeUp 0.4s 150ms ease both;
 }
 
 .heroText h2 {
   margin: 0 0 14px;
   color: #fff;
-  font-size: clamp(1.6rem, 3.5vw, 2.8rem);
+  font-size: clamp(1.6rem, 4vw, 3.2rem);
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.12;
   letter-spacing: -0.03em;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 @media (min-width: 1024px) {
   .heroText h2 {
-    font-size: clamp(2.2rem, 3vw, 3.4rem);
+    font-size: clamp(2.4rem, 3.2vw, 3.8rem);
   }
 }
 
 .heroText p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 0.9rem;
   line-height: 1.6;
   max-width: 38ch;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .accent {
@@ -296,31 +285,30 @@
 .featureTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
   animation: fadeUp 0.4s 300ms ease both;
 }
 
 .featureTag {
   display: flex;
   align-items: center;
-  gap: 7px;
-  background: rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  padding: 10px 16px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.75rem;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.72rem;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background 0.2s;
   cursor: default;
 }
 
 .featureTag:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .featureIcon {
@@ -340,6 +328,17 @@
   }
 }
 
+@keyframes mottoFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+  }
+  50% {
+    transform: translateY(-9px) scale(1.07);
+    filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.22));
+  }
+}
+
 /* ── Mobile tweaks ──────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .actions {
@@ -349,67 +348,5 @@
   .primaryButton,
   .secondaryButton {
     width: 100%;
-  }
-
-  .footer {
-    flex-direction: column;
-    gap: 6px;
-    text-align: center;
-  }
-}
-
-@media (max-width: 480px) {
-  .leftPanel {
-    padding: 16px 16px;
-  }
-
-  .logoWrap {
-    margin-bottom: 12px;
-  }
-
-  .logo {
-    height: 28px;
-  }
-
-  .heading {
-    font-size: clamp(1.8rem, 8vw, 2.4rem);
-  }
-
-  .kicker {
-    font-size: 0.66rem;
-  }
-
-  .desc {
-    font-size: 0.88rem;
-  }
-
-  .primaryButton,
-  .secondaryButton {
-    min-height: 42px;
-    font-size: 0.88rem;
-    padding: 0 18px;
-    border-radius: 10px;
-  }
-
-  .overlay {
-    padding: 16px;
-  }
-
-  .heroBadge {
-    font-size: 0.62rem;
-    padding: 6px 12px;
-  }
-
-  .heroText h2 {
-    font-size: clamp(1.3rem, 5vw, 1.8rem);
-  }
-
-  .heroText p {
-    font-size: 0.82rem;
-  }
-
-  .featureTag {
-    padding: 8px 12px;
-    font-size: 0.68rem;
   }
 }

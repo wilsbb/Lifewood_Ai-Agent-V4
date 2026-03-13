@@ -1,20 +1,35 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { CATEGORY_LABELS, CATEGORY_COLORS, formatPeso } from '../../lib/api';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { CATEGORY_LABELS, formatPeso } from '../../lib/api';
+
+const BRAND_COLORS = [
+  '#FFB347',
+  '#FFC370',
+  '#F4D0A4',
+  '#C17110',
+  '#E89131',
+  '#046241',
+  '#708E7C',
+  '#9CAFA4',
+  '#133020',
+];
 
 const cardStyle = {
-  background: 'linear-gradient(135deg, #111827 0%, #0f172a 100%)',
-  border: '1px solid #1f2937',
-  borderRadius: '12px',
+  background: 'var(--glass-bg)',
+  border: '1px solid var(--glass-border)',
+  borderRadius: '16px',
   padding: '24px',
+  boxShadow: 'var(--glass-shadow)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
 };
 
 const titleStyle = {
-  fontFamily: "'Syne', sans-serif",
+  fontFamily: "'Manrope', sans-serif",
   fontSize: '11px',
-  fontWeight: 600,
+  fontWeight: 700,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
-  color: '#6b7280',
+  color: 'var(--lw-muted)',
   marginBottom: '20px',
 };
 
@@ -23,17 +38,20 @@ const CustomTooltip = ({ active, payload }) => {
   const d = payload[0];
   return (
     <div style={{
-      background: '#1f2937',
-      border: '1px solid #374151',
-      borderRadius: '8px',
+      background: 'var(--glass-bg-strong)',
+      border: '1px solid var(--glass-border)',
+      borderRadius: '10px',
       padding: '10px 14px',
-      fontFamily: "'JetBrains Mono', monospace",
+      fontFamily: "'Manrope', sans-serif",
       fontSize: '12px',
-      color: '#f9fafb',
+      color: 'var(--lw-text)',
+      boxShadow: 'var(--glass-shadow)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
     }}>
       <div style={{ color: d.payload.fill, fontWeight: 700, marginBottom: '4px' }}>{d.name}</div>
       <div>{formatPeso(d.value)}</div>
-      <div style={{ color: '#9ca3af' }}>{d.payload.count} receipt{d.payload.count !== 1 ? 's' : ''}</div>
+      <div style={{ color: 'var(--lw-muted)' }}>{d.payload.count} receipt{d.payload.count !== 1 ? 's' : ''}</div>
     </div>
   );
 };
@@ -47,20 +65,21 @@ const CustomLegend = ({ data }) => (
           background: entry.fill, flexShrink: 0,
         }} />
         <span style={{
-          fontFamily: "'Syne', sans-serif",
+          fontFamily: "'Manrope', sans-serif",
           fontSize: '11px',
-          color: '#9ca3af',
+          color: 'var(--lw-muted)',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          maxWidth: '120px',
+          maxWidth: '140px',
         }}>
           {entry.name}
         </span>
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: "'Manrope', sans-serif",
           fontSize: '11px',
-          color: '#f9fafb',
+          color: 'var(--lw-text)',
+          fontWeight: 700,
           marginLeft: 'auto',
         }}>
           {entry.pct}%
@@ -74,7 +93,7 @@ export default function CategoryChart({ categories, loading }) {
   if (loading) return (
     <div style={cardStyle}>
       <div style={titleStyle}>Spend by Category</div>
-      <div style={{ height: '260px', background: '#1f2937', borderRadius: '8px', animation: 'pulse 1.5s infinite' }} />
+      <div style={{ height: '260px', background: 'var(--lw-sea-salt)', borderRadius: '10px', animation: 'pulse 1.5s infinite' }} />
     </div>
   );
 
@@ -85,7 +104,7 @@ export default function CategoryChart({ categories, loading }) {
       name: CATEGORY_LABELS[c.category] || c.category,
       value: parseFloat(c.total_spend || 0),
       count: c.transaction_count || 0,
-      fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      fill: BRAND_COLORS[i % BRAND_COLORS.length],
       pct: total > 0 ? ((parseFloat(c.total) / total) * 100).toFixed(1) : '0.0',
     }))
     .sort((a, b) => b.value - a.value)
@@ -94,7 +113,7 @@ export default function CategoryChart({ categories, loading }) {
   if (data.length === 0) return (
     <div style={cardStyle}>
       <div style={titleStyle}>Spend by Category</div>
-      <div style={{ textAlign: 'center', color: '#4b5563', padding: '60px 0', fontFamily: "'Syne', sans-serif", fontSize: '13px' }}>
+      <div style={{ textAlign: 'center', color: 'var(--lw-muted)', padding: '60px 0', fontFamily: "'Manrope', sans-serif", fontSize: '13px' }}>
         No category data yet
       </div>
     </div>

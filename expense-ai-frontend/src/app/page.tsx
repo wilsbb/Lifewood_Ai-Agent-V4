@@ -31,7 +31,7 @@ export default function HomePage() {
 
         {/* Content */}
         <div className={styles.content}>
-          <span className={styles.kicker}>Expense workspace</span>
+          <span className={styles.kicker}>—Expense workspace—</span>
           <h1 className={styles.heading}>Expense AI</h1>
           <p className={styles.desc}>
             Connect Google Drive to open your Lifewood review dashboard.
@@ -62,7 +62,8 @@ export default function HomePage() {
         <div className={styles.overlay}>
           {/* Top badge */}
           <div className={styles.heroBadge}>
-            Always On Never Off
+            <span className={styles.heroBadgeAlwaysOn}>ALWAYS ON</span>
+            <span className={styles.heroBadgeNeverOff}>NEVER OFF</span>
           </div>
 
           {/* Hero text */}
