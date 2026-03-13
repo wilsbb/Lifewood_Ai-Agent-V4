@@ -123,6 +123,7 @@ function getFolderHealth(item: DriveItem): { label: string; tone: 'healthy' | 'a
   return { label: 'Empty', tone: 'attention' };
 }
 
+<<<<<<< HEAD
 const GREETINGS = ['Good day, admin', 'Welcome back, admin', 'Hello, admin'];
 
 function useCyclingGreeting(intervalMs: number) {
@@ -143,6 +144,8 @@ function useCyclingGreeting(intervalMs: number) {
   return { greeting: GREETINGS[index], animClass };
 }
 
+=======
+>>>>>>> 61e4a28c500af9ebbf9fcba95bbf1e9946dc4597
 export default function DrivePage() {
   const router = useRouter();
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -253,7 +256,20 @@ export default function DrivePage() {
         </a>
 
         {/* ── Centre nav ── */}
+<<<<<<< HEAD
         <nav className={styles.topbarNav} />
+=======
+        <nav className={styles.topbarNav}>
+          <a
+            className={styles.navPill}
+            href="/dashboard"
+          >
+            <LayoutDashboard className={styles.navIcon} size={14} />
+            <span className={styles.navLabel}>GO TO DASHBOARD</span>
+            <span className={styles.navActiveDot} aria-hidden="true" />
+          </a>
+        </nav>
+>>>>>>> 61e4a28c500af9ebbf9fcba95bbf1e9946dc4597
 
         {/* ── Actions ── */}
         <div className={styles.topbarActions}>
@@ -283,8 +299,17 @@ export default function DrivePage() {
       <section className={styles.heroBanner}>
         <div className={styles.heroBannerLeft}>
           <span className={styles.heroTagline}>ALWAYS ON NEVER OFF</span>
+<<<<<<< HEAD
           <h1 className={`${styles.greetingText} ${animClass === 'splitIn' ? styles.splitIn : styles.splitOut}`}>
             {greeting}
+=======
+          <h1
+            className={`${styles.greetingText} ${styles.greetingHeader} ${
+              userType === 'new' ? styles.newUserHeaderIn : styles.returningUserHeaderIn
+            }`}
+          >
+            {greetingContent.header}
+>>>>>>> 61e4a28c500af9ebbf9fcba95bbf1e9946dc4597
           </h1>
           <p
             className={`${styles.heroSubtitle} ${styles.greetingDescription} ${

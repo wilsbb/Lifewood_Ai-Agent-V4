@@ -287,6 +287,32 @@
   display: inline-block;
 }
 
+.greetingHeader {
+  font-family: var(--font-manrope, Manrope), "Segoe UI", sans-serif;
+  color: var(--white);
+}
+
+.greetingDescription {
+  font-family: var(--font-manrope, Manrope), "Segoe UI", sans-serif;
+  color: rgba(245, 238, 219, 0.88);
+}
+
+.newUserHeaderIn {
+  animation: lifewoodFadeRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.newUserDescriptionIn {
+  animation: lifewoodFadeRise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.returningUserHeaderIn {
+  animation: lifewoodSlideUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.returningUserDescriptionIn {
+  animation: lifewoodSlideUp 0.58s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
 .splitIn {
   animation: splitIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -446,6 +472,7 @@
   color: rgba(246, 241, 227, 0.9);
 }
 
+<<<<<<< HEAD
 .heroCard h1 {
   position: relative;
   margin: 14px 0 8px;
@@ -518,6 +545,8 @@
   gap: 10px;
 }
 
+=======
+>>>>>>> 61e4a28c500af9ebbf9fcba95bbf1e9946dc4597
 .metricCard {
   position: relative;
   overflow: hidden;

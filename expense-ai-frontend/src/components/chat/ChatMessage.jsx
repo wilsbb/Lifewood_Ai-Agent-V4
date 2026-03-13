@@ -33,7 +33,7 @@ function renderContent(text) {
             background: 'rgba(255,179,71,0.2)',
             color: 'var(--lw-dark)',
             padding: '1px 5px',
-            borderRadius: '4px',
+            borderRadius: '5px',
           }}>
             {match[3]}
           </code>

@@ -31,7 +31,7 @@ export default function HomePage() {
 
         {/* Content */}
         <div className={styles.content}>
-          <span className={styles.kicker}>Expense workspace</span>
+          <span className={styles.kicker}>—Expense workspace—</span>
           <h1 className={styles.heading}>Expense AI</h1>
           <p className={styles.desc}>
             Connect Google Drive to open your Lifewood review dashboard.
