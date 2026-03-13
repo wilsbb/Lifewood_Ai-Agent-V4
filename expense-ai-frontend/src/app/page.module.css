@@ -163,9 +163,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.68rem;
-  color: rgba(19, 48, 32, 0.38);
-  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(19, 48, 32, 0.66);
+  letter-spacing: 0.02em;
   animation: fadeUp 0.4s 200ms ease both;
 }
 
@@ -365,8 +366,8 @@
     filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
   }
   50% {
-    transform: translateY(-13px) scale(1.11);
-    filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.28));
+    transform: translateY(-6px) scale(1.05);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.22));
   }
 }
 

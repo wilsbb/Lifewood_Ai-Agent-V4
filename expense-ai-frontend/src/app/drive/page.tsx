@@ -43,8 +43,6 @@ function summarizeTree(items: DriveItem[]) {
   return { folderCount, fileCount };
 }
 
-<<<<<<< HEAD
-=======
 function getLatestModified(items: DriveItem[]): string | null {
   let latestTimestamp = 0;
 
@@ -125,27 +123,6 @@ function getFolderHealth(item: DriveItem): { label: string; tone: 'healthy' | 'a
   return { label: 'Empty', tone: 'attention' };
 }
 
-const GREETINGS = ['Good day, admin', 'Welcome back, admin', 'Hello, admin'];
-
-function useCyclingGreeting(intervalMs: number) {
-  const [index, setIndex] = useState(0);
-  const [animClass, setAnimClass] = useState('splitIn');
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setAnimClass('splitOut');
-      setTimeout(() => {
-        setIndex((prev) => (prev + 1) % GREETINGS.length);
-        setAnimClass('splitIn');
-      }, 500);
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-
-  return { greeting: GREETINGS[index], animClass };
-}
-
->>>>>>> b6b845ce6ae90545d016c4a5d336703ed6f9d584
 export default function DrivePage() {
   const router = useRouter();
   const [folders, setFolders] = useState<DriveItem[]>([]);
@@ -281,31 +258,18 @@ export default function DrivePage() {
         </div>
       </header>
 
-<<<<<<< HEAD
-      <section className={styles.hero}>
-        <div className={styles.heroCard}>
-          <div className={styles.heroTicker} aria-label="Always on never off">
-            <div className={styles.heroTickerTrack}>
-              <span>Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
-              <span aria-hidden="true">Always On Never Off • Always On Never Off • Always On Never Off • Always On Never Off •</span>
-            </div>
-          </div>
-          <h1
-            className={`${styles.greetingText} ${styles.greetingHeader} ${
-              userType === 'new' ? styles.newUserHeaderIn : styles.returningUserHeaderIn
-            }`}
-          >
-            {greetingContent.header}
-=======
       <div className={styles.pageContent}>
 
       {/* ── Hero banner ── */}
       <section className={styles.heroBanner}>
         <div className={styles.heroBannerLeft}>
           <span className={styles.heroTagline}>ALWAYS ON NEVER OFF</span>
-          <h1 className={`${styles.greetingText} ${animClass === 'splitIn' ? styles.splitIn : styles.splitOut}`}>
-            {greeting}
->>>>>>> b6b845ce6ae90545d016c4a5d336703ed6f9d584
+          <h1
+            className={`${styles.greetingText} ${styles.greetingHeader} ${
+              userType === 'new' ? styles.newUserHeaderIn : styles.returningUserHeaderIn
+            }`}
+          >
+            {greetingContent.header}
           </h1>
           <p
             className={`${styles.heroSubtitle} ${styles.greetingDescription} ${
