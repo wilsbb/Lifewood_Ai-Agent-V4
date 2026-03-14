@@ -441,14 +441,14 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
                 width: '30px',
                 height: '30px',
                 borderRadius: '10px',
-                background: 'var(--lw-white)',
-                border: '1px solid var(--lw-border)',
+                background: 'transparent',
+                border: 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--lw-dark)',
                 cursor: 'pointer',
-                boxShadow: '0 4px 10px rgba(19,48,32,0.08)',
+                boxShadow: 'none',
               }}
             >
               X
