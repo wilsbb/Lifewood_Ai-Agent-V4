@@ -551,12 +551,12 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
           aria-hidden="true"
           style={{
             position: 'absolute',
-            inset: '-14px',
-            borderRadius: '26px',
-            background: 'radial-gradient(circle at 50% 50%, rgba(255,179,71,0.55) 0%, rgba(255,179,71,0.15) 55%, rgba(255,179,71,0) 80%)',
-            filter: 'blur(6px)',
-            opacity: open ? 0.95 : 0.85,
-            animation: 'ai-aura 2.6s ease-in-out infinite, ai-glow 3.2s ease-in-out infinite',
+            inset: '-18px',
+            borderRadius: '30px',
+            background: 'radial-gradient(circle at 50% 50%, rgba(255,179,71,0.75) 0%, rgba(255,179,71,0.3) 55%, rgba(255,179,71,0) 85%)',
+            filter: 'blur(9px)',
+            opacity: open ? 1 : 0.92,
+            animation: 'ai-aura 2.2s ease-in-out infinite, ai-glow 2.6s ease-in-out infinite',
             zIndex: 0,
             pointerEvents: 'none',
           }}
@@ -587,7 +587,9 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
             {BUBBLES[bubbleIndex]}
           </div>
         )}
-        <span style={{
+        <span
+          className="lw-ai-icon"
+          style={{
           width: '32px',
           height: '32px',
           borderRadius: '50%',
@@ -600,7 +602,8 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
             ? 'ai-open 0.5s ease-out, ai-idle 2.8s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite'
             : 'ai-idle 3.2s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite',
           zIndex: 1,
-        }}>
+        }}
+        >
           <Bot size={16} strokeWidth={2.2} />
         </span>
       </button>
@@ -624,6 +627,13 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
           45% { transform: scale(1.06); }
           60% { transform: scale(0.98); }
           75% { transform: scale(1.03); }
+        }
+        .lw-ai-icon {
+          transition: transform 0.2s ease, filter 0.2s ease;
+        }
+        button:hover .lw-ai-icon {
+          transform: scale(1.08) rotate(-6deg);
+          filter: drop-shadow(0 8px 12px rgba(255, 179, 71, 0.35));
         }
         @keyframes ai-aura {
           0%, 100% { transform: scale(0.98); opacity: 0.6; }

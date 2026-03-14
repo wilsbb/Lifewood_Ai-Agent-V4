@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import SpendSummaryCards from '../../components/analytics/SpendSummaryCards';
 import CategoryChart     from '../../components/analytics/CategoryChart';
 import TrendsChart       from '../../components/analytics/TrendsChart';
@@ -102,38 +101,20 @@ export default function DashboardClient() {
           </div>
 
           <div className="lw-navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <a className="lw-back" href="/drive">
-              <ArrowLeft size={14} />
-              Back to Drive
-            </a>
-            <div style={{
-              display: 'flex',
-              gap: '4px',
-              background: 'var(--lw-surface)',
-              borderRadius: '999px',
-              padding: '4px',
-              border: '1px solid var(--lw-border)',
-            }}>
+            <div className="lw-period-group" role="radiogroup" aria-label="Time range">
               {PERIODS.map((p) => (
-                <button
-                  key={p.value}
-                  onClick={() => setPeriod(p.value)}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: '999px',
-                    border: 'none',
-                    background: period === p.value ? 'var(--lw-accent)' : 'transparent',
-                    color: period === p.value ? 'var(--lw-dark)' : 'var(--lw-muted)',
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: '12px',
-                    fontWeight: period === p.value ? 700 : 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {p.label}
-                </button>
+                <Fragment key={p.value}>
+                  <input
+                    type="radio"
+                    id={`lw-period-${p.value}`}
+                    name="lw-period"
+                    checked={period === p.value}
+                    onChange={() => setPeriod(p.value)}
+                  />
+                  <label htmlFor={`lw-period-${p.value}`}>{p.label}</label>
+                </Fragment>
               ))}
+              <div className="lw-period-glider" />
             </div>
 
             <button
@@ -159,27 +140,80 @@ export default function DashboardClient() {
               </svg>
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
+            {loading && (
+              <div className="lw-refresh-loader" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" className="pencil">
+                  <defs>
+                    <clipPath id="pencil-eraser">
+                      <rect height="30" width="30" ry="5" rx="5" />
+                    </clipPath>
+                  </defs>
+                  <circle transform="rotate(-113,100,100)" strokeLinecap="round" strokeDashoffset="439.82" strokeDasharray="439.82 439.82" strokeWidth="2" stroke="currentColor" fill="none" r="70" className="pencil__stroke" />
+                  <g transform="translate(100,100)" className="pencil__rotate">
+                    <g fill="none">
+                      <circle transform="rotate(-90)" strokeDashoffset="402" strokeDasharray="402.12 402.12" strokeWidth="30" stroke="hsl(223,90%,50%)" r="64" className="pencil__body1" />
+                      <circle transform="rotate(-90)" strokeDashoffset="465" strokeDasharray="464.96 464.96" strokeWidth="10" stroke="hsl(223,90%,60%)" r="74" className="pencil__body2" />
+                      <circle transform="rotate(-90)" strokeDashoffset="339" strokeDasharray="339.29 339.29" strokeWidth="10" stroke="hsl(223,90%,40%)" r="54" className="pencil__body3" />
+                    </g>
+                    <g transform="rotate(-90) translate(49,0)" className="pencil__eraser">
+                      <g className="pencil__eraser-skew">
+                        <rect height="30" width="30" ry="5" rx="5" fill="hsl(223,90%,70%)" />
+                        <rect clipPath="url(#pencil-eraser)" height="30" width="5" fill="hsl(223,90%,60%)" />
+                        <rect height="20" width="30" fill="hsl(223,10%,90%)" />
+                        <rect height="20" width="15" fill="hsl(223,10%,70%)" />
+                        <rect height="20" width="5" fill="hsl(223,10%,80%)" />
+                        <rect height="2" width="30" y="6" fill="hsla(223,10%,10%,0.2)" />
+                        <rect height="2" width="30" y="13" fill="hsla(223,10%,10%,0.2)" />
+                      </g>
+                    </g>
+                    <g transform="rotate(-90) translate(49,-30)" className="pencil__point">
+                      <polygon points="15 0,30 30,0 30" fill="hsl(33,90%,70%)" />
+                      <polygon points="15 0,6 30,0 30" fill="hsl(33,90%,50%)" />
+                      <polygon points="15 0,20 10,10 10" fill="hsl(223,10%,10%)" />
+                    </g>
+                  </g>
+                </svg>
+              </div>
+            )}
           </div>
         </nav>
 
         <main style={CONTENT}>
-          <div style={{ marginBottom: '28px' }}>
-            <h1 style={{
-              fontFamily: "'Manrope', sans-serif",
-              fontSize: '28px',
-              fontWeight: 700,
-              color: 'var(--lw-text)',
-              margin: 0,
-              letterSpacing: '-0.02em',
-            }}>
-              Expense Dashboard
-            </h1>
-            <p style={{ color: 'var(--lw-muted)', fontSize: '13px', marginTop: '6px', marginBottom: 0 }}>
-              {lastRefresh
-                ? `Updated ${lastRefresh.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
-                : 'Loading data...'
-              }
-            </p>
+          <div style={{
+            marginBottom: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+          }}>
+            <a className="lw-back" href="/drive">
+              <span className="lw-back-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" height="18" width="18" aria-hidden="true">
+                  <path d="M224 480h640a32 32 0 1 1 0 64H224a32 32 0 0 1 0-64z" fill="#000000" />
+                  <path d="m237.248 512 265.408 265.344a32 32 0 0 1-45.312 45.312l-288-288a32 32 0 0 1 0-45.312l288-288a32 32 0 1 1 45.312 45.312L237.248 512z" fill="#000000" />
+                </svg>
+              </span>
+              <span className="lw-back-text">Back to Drive</span>
+            </a>
+            <div style={{ minWidth: '240px', textAlign: 'right' }}>
+              <h1 style={{
+                fontFamily: "'Manrope', sans-serif",
+                fontSize: '28px',
+                fontWeight: 700,
+                color: 'var(--lw-text)',
+                margin: 0,
+                letterSpacing: '-0.02em',
+              }}>
+                Expense Dashboard
+              </h1>
+              <p style={{ color: 'var(--lw-muted)', fontSize: '13px', marginTop: '6px', marginBottom: 0 }}>
+                {lastRefresh
+                  ? `Updated ${lastRefresh.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Loading data...'
+                }
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -321,35 +355,143 @@ export default function DashboardClient() {
           opacity: 0.6;
           cursor: not-allowed;
         }
+        .lw-refresh-loader {
+          width: 44px;
+          height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pencil {
+          display: block;
+          width: 44px;
+          height: 44px;
+        }
+        .pencil__body1,
+        .pencil__body2,
+        .pencil__body3,
+        .pencil__eraser,
+        .pencil__eraser-skew,
+        .pencil__point,
+        .pencil__rotate,
+        .pencil__stroke {
+          animation-duration: 3s;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+        }
+        .pencil__body1,
+        .pencil__body2,
+        .pencil__body3 {
+          transform: rotate(-90deg);
+        }
+        .pencil__body1 { animation-name: pencilBody1; }
+        .pencil__body2 { animation-name: pencilBody2; }
+        .pencil__body3 { animation-name: pencilBody3; }
+        .pencil__eraser {
+          animation-name: pencilEraser;
+          transform: rotate(-90deg) translate(49px,0);
+        }
+        .pencil__eraser-skew {
+          animation-name: pencilEraserSkew;
+          animation-timing-function: ease-in-out;
+        }
+        .pencil__point {
+          animation-name: pencilPoint;
+          transform: rotate(-90deg) translate(49px,-30px);
+        }
+        .pencil__rotate { animation-name: pencilRotate; }
+        .pencil__stroke {
+          animation-name: pencilStroke;
+          transform: translate(100px,100px) rotate(-113deg);
+        }
+        @keyframes pencilBody1 {
+          from, to { stroke-dashoffset: 351.86; transform: rotate(-90deg); }
+          50% { stroke-dashoffset: 150.8; transform: rotate(-225deg); }
+        }
+        @keyframes pencilBody2 {
+          from, to { stroke-dashoffset: 406.84; transform: rotate(-90deg); }
+          50% { stroke-dashoffset: 174.36; transform: rotate(-225deg); }
+        }
+        @keyframes pencilBody3 {
+          from, to { stroke-dashoffset: 296.88; transform: rotate(-90deg); }
+          50% { stroke-dashoffset: 127.23; transform: rotate(-225deg); }
+        }
+        @keyframes pencilEraser {
+          from, to { transform: rotate(-45deg) translate(49px,0); }
+          50% { transform: rotate(0deg) translate(49px,0); }
+        }
+        @keyframes pencilEraserSkew {
+          from, 32.5%, 67.5%, to { transform: skewX(0); }
+          35%, 65% { transform: skewX(-4deg); }
+          37.5%, 62.5% { transform: skewX(8deg); }
+          40%, 45%, 50%, 55%, 60% { transform: skewX(-15deg); }
+          42.5%, 47.5%, 52.5%, 57.5% { transform: skewX(15deg); }
+        }
+        @keyframes pencilPoint {
+          from, to { transform: rotate(-90deg) translate(49px,-30px); }
+          50% { transform: rotate(-225deg) translate(49px,-30px); }
+        }
+        @keyframes pencilRotate {
+          from { transform: translate(100px,100px) rotate(0); }
+          to { transform: translate(100px,100px) rotate(720deg); }
+        }
+        @keyframes pencilStroke {
+          from { stroke-dashoffset: 439.82; transform: translate(100px,100px) rotate(-113deg); }
+          50% { stroke-dashoffset: 164.93; transform: translate(100px,100px) rotate(-113deg); }
+          75%, to { stroke-dashoffset: 439.82; transform: translate(100px,100px) rotate(112deg); }
+        }
         @keyframes spin_357 {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
         .lw-back {
-          color: var(--lw-text);
           background: var(--lw-white);
-          font-weight: 600;
-          border-radius: 0.6rem;
-          font-size: 0.8rem;
-          line-height: 1.5rem;
-          padding: 0.45rem 0.9rem;
-          border: 1px solid var(--lw-border);
           text-decoration: none;
+          width: 180px;
+          height: 46px;
+          border-radius: 16px;
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          transition: background-color 0.15s ease, border-color 0.15s ease;
-          box-shadow: 0 6px 14px rgba(19,48,32,0.08);
+          justify-content: center;
+          position: relative;
+          color: #0f261a;
+          font-size: 14px;
+          font-weight: 700;
+          overflow: hidden;
+          border: 1px solid var(--lw-border);
+          box-shadow: 0 6px 14px rgba(19, 48, 32, 0.12);
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .lw-back:hover {
-          background: var(--lw-surface-alt);
-          border-color: rgba(19,48,32,0.2);
+          border-color: rgba(4, 98, 65, 0.25);
+          box-shadow: 0 10px 18px rgba(19, 48, 32, 0.16);
         }
-        .lw-back svg {
-          transition: transform 0.2s ease;
+        .lw-back-text {
+          position: relative;
+          z-index: 1;
+          transform: translateX(6px);
+          transition: color 0.2s ease, opacity 0.2s ease;
         }
-        .lw-back:hover svg {
-          transform: translateX(-3px);
+        .lw-back-icon {
+          position: absolute;
+          left: 6px;
+          top: 6px;
+          height: 34px;
+          width: 34px;
+          border-radius: 12px;
+          background: var(--lw-green);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2;
+          transition: width 0.5s ease;
+        }
+        .lw-back:hover .lw-back-icon {
+          width: calc(100% - 12px);
+        }
+        .lw-back:hover .lw-back-text {
+          color: transparent;
+          opacity: 0;
         }
 
         @media (max-width: 900px) {
@@ -389,6 +531,79 @@ export default function DashboardClient() {
             flex-wrap: wrap;
             gap: 10px;
           }
+        }
+
+        .lw-period-group {
+          --bg: rgba(255, 255, 255, 0.86);
+          --text: #708E7C;
+          display: flex;
+          position: relative;
+          background: var(--bg);
+          border-radius: 999px;
+          backdrop-filter: none;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.8),
+            0 6px 16px rgba(19, 48, 32, 0.12);
+          overflow: hidden;
+          width: fit-content;
+        }
+        .lw-period-group input {
+          display: none;
+        }
+        .lw-period-group label {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 120px;
+          font-size: 12px;
+          padding: 0.55rem 1.1rem;
+          cursor: pointer;
+          font-weight: 700;
+          letter-spacing: 0.3px;
+          color: var(--text);
+          position: relative;
+          z-index: 2;
+          transition: color 0.3s ease-in-out;
+          font-family: "'Manrope', sans-serif";
+          white-space: nowrap;
+        }
+        .lw-period-group label:hover {
+          color: #133020;
+        }
+        .lw-period-group input:checked + label {
+          color: #133020;
+        }
+        .lw-period-glider {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: calc(100% / 3);
+          border-radius: 999px;
+          z-index: 1;
+          transition:
+            transform 0.5s cubic-bezier(0.37, 1.95, 0.66, 0.56),
+            background 0.4s ease-in-out,
+            box-shadow 0.4s ease-in-out;
+          background: linear-gradient(135deg, #ffd79a, #ffbf5c);
+          box-shadow:
+            0 6px 14px rgba(255, 179, 71, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        }
+
+        #lw-period-month:checked ~ .lw-period-glider {
+          transform: translateX(0%);
+          filter: brightness(0.96);
+        }
+
+        #lw-period-quarter:checked ~ .lw-period-glider {
+          transform: translateX(100%);
+          filter: brightness(0.96);
+        }
+
+        #lw-period-year:checked ~ .lw-period-glider {
+          transform: translateX(200%);
+          filter: brightness(0.96);
         }
 
         @media (max-width: 600px) {

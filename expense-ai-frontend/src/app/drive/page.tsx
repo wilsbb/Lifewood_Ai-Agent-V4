@@ -218,10 +218,14 @@ export default function DrivePage() {
   if (loading) {
     return (
       <main className={styles.pageShell}>
-        <section className={styles.loadingState}>
-          <Loader2 className={styles.spinner} size={32} />
+        <section className={`${styles.loadingState} ${styles.loadingStateNoAnim}`}>
           <h1>Loading your workspace</h1>
           <p>Syncing scanned folders from Google Drive&hellip;</p>
+          <div className={styles.simpleLoader} aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
         </section>
       </main>
     );
