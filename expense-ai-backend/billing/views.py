@@ -797,3 +797,148 @@ def n8n_analytics_proxy(request):
             for r in recent_receipts
         ],
     })
+    
+@csrf_exempt
+def process_ocr(request):
+    if not _is_n8n_request(request):
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    file_id = data.get('file_id')
+    folder_id = data.get('folder_id', '')
+    folder_name = data.get('folder_name', '')
+    file_name = data.get('file_name', '')
+
+    if not file_id:
+        return JsonResponse({'error': 'file_id is required'}, status=400)
+
+    # Get Google Drive credentials
+    creds = _get_n8n_credentials()
+    if not creds:
+        return JsonResponse({'error': 'No stored Google credentials.'}, status=401)
+
+    # Download file from Google Drive
+    try:
+        from googleapiclient.discovery import build
+        service = build('drive', 'v3', credentials=creds)
+        metadata = service.files().get(fileId=file_id, fields="id,name,mimeType").execute()
+        mime_type = metadata.get('mimeType', 'image/jpeg')
+        content = service.files().get_media(fileId=file_id).execute()
+        base64_image = base64.b64encode(content).decode('utf-8')
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to download file: {str(e)}'}, status=500)
+
+    # Call OpenRouter
+    openrouter_key = os.environ.get('OPENROUTER_API_KEY')
+    if not openrouter_key:
+        return JsonResponse({'error': 'OPENROUTER_API_KEY not configured'}, status=500)
+
+    ocr_prompt = """You are a BIR (Bureau of Internal Revenue) receipt OCR specialist for the Philippines. Extract all structured data from this receipt or invoice image.
+
+Return ONLY a valid JSON object — no markdown, no explanation, no code fences. Use these exact field names:
+{
+  "document_type": "official_receipt|invoice|sales_invoice|delivery_receipt|collection_receipt|acknowledgment_receipt|charge_invoice|cash_invoice|debit_memo|credit_memo|job_order|purchase_order|billing_statement|statement_of_account|unknown",
+  "vat_type": "vat|non_vat|zero_rated|vat_exempt|unknown",
+  "expense_category": "office_supplies|meals_entertainment|transportation|utilities|communication|professional_fees|rent|salaries|repairs_maintenance|taxes_licenses|insurance|advertising|miscellaneous|uncategorized",
+  "business_name": "",
+  "business_address": "",
+  "tin": "",
+  "receipt_number": "",
+  "bir_permit_number": "",
+  "expense_date": "YYYY-MM-DD or empty string",
+  "description": "brief description of what was purchased",
+  "buyer_name": "",
+  "buyer_tin": "",
+  "subtotal": 0.00,
+  "vatable_sales": 0.00,
+  "vat_exempt_sales": 0.00,
+  "zero_rated_sales": 0.00,
+  "vat_amount": 0.00,
+  "total": 0.00
+}
+
+Rules:
+- All numeric fields must be numbers (not strings)
+- Dates must be YYYY-MM-DD format or empty string if not found
+- TIN format: XXX-XXX-XXX-XXX
+- If a field is not found on the receipt, use empty string or 0
+- For expense_category, infer from the business name and description
+- Return ONLY the JSON object, nothing else"""
+
+    try:
+        response = requests.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {openrouter_key}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'openai/gpt-4o',
+                'max_tokens': 1024,
+                'messages': [{
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image_url',
+                            'image_url': {
+                                'url': f'data:{mime_type};base64,{base64_image}',
+                                'detail': 'high'
+                            }
+                        },
+                        {
+                            'type': 'text',
+                            'text': ocr_prompt
+                        }
+                    ]
+                }]
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        reply = response.json()['choices'][0]['message']['content']
+    except Exception as e:
+        return JsonResponse({'error': f'OpenRouter call failed: {str(e)}'}, status=500)
+
+    # Parse OCR response
+    try:
+        cleaned = reply.replace('```json', '').replace('```', '').strip()
+        ocr_data = json.loads(cleaned)
+    except Exception:
+        ocr_data = {
+            'document_type': 'unknown',
+            'vat_type': 'unknown',
+            'expense_category': 'uncategorized',
+            'business_name': '',
+            'total': 0,
+        }
+
+    return JsonResponse({
+        'drive_file_id':      file_id,
+        'drive_file_name':    file_name,
+        'drive_folder_id':    folder_id,
+        'drive_folder_name':  folder_name,
+        'status':             'processed',
+        'ocr_raw_text':       reply,
+        'document_type':      ocr_data.get('document_type',     'unknown'),
+        'vat_type':           ocr_data.get('vat_type',          'unknown'),
+        'expense_category':   ocr_data.get('expense_category',  'uncategorized'),
+        'business_name':      ocr_data.get('business_name',     ''),
+        'business_address':   ocr_data.get('business_address',  ''),
+        'tin':                ocr_data.get('tin',               ''),
+        'receipt_number':     ocr_data.get('receipt_number',    ''),
+        'bir_permit_number':  ocr_data.get('bir_permit_number', ''),
+        'expense_date':       ocr_data.get('expense_date',      ''),
+        'description':        ocr_data.get('description',       ''),
+        'buyer_name':         ocr_data.get('buyer_name',        ''),
+        'buyer_tin':          ocr_data.get('buyer_tin',         ''),
+        'subtotal':           float(ocr_data.get('subtotal',         0) or 0),
+        'vatable_sales':      float(ocr_data.get('vatable_sales',    0) or 0),
+        'vat_exempt_sales':   float(ocr_data.get('vat_exempt_sales', 0) or 0),
+        'zero_rated_sales':   float(ocr_data.get('zero_rated_sales', 0) or 0),
+        'vat_amount':         float(ocr_data.get('vat_amount',       0) or 0),
+        'total':              float(ocr_data.get('total',            0) or 0),
+    })

@@ -26,4 +26,5 @@ urlpatterns = [
 
     # n8n proxy — single call that returns everything the agent needs
     path('n8n/analytics/',         views.n8n_analytics_proxy,   name='n8n_analytics_proxy'),
+    path('receipts/process-ocr/', views.process_ocr, name='process_ocr'),
 ]
