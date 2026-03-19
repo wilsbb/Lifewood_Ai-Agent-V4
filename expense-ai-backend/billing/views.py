@@ -1235,20 +1235,40 @@ Rules:
             'agent_message_id': agent_msg.id,
         })
 
-    folder_id   = intent.get('folder_id')
-    folder_name = intent.get('target_folder_name', 'Uploads')
+    # FIX: intent.get() default only fires when key MISSING, not when null.
+    # If GPT returns "target_folder_name": null we get None, which then
+    # propagates into _create_drive_folder causing "missing argument: name".
+    folder_id   = intent.get('folder_id') or None
+    folder_name = (intent.get('target_folder_name') or intent.get('folder_name') or '').strip() or None
     folder_created = False
+
+    # If GPT couldn't determine a folder name, ask the user
+    if not folder_name:
+        available = ', '.join(f['name'] for f in all_folders[:10])
+        reply = (
+            "I couldn't determine which folder to use from your message. "
+            "Please mention the folder name clearly, e.g. "
+            "'This receipt is for the Admin Expense folder.' "
+            f"Your existing folders: {available}"
+        )
+        agent_msg = ChatMessage.objects.create(
+            conversation=conversation, role='agent', content=reply)
+        conversation.save()
+        return JsonResponse({
+            'conversation_id': conversation.id, 'reply': reply,
+            'user_message_id': user_chat_msg.id, 'agent_message_id': agent_msg.id,
+        })
 
     # ── Find or create folder ──────────────────────────────────────────────
     if not folder_id:
-        # One more attempt: fuzzy match locally
+        # One more attempt: fuzzy match locally before creating
         matched = _find_folder_by_name(all_folders, folder_name)
         if matched:
             folder_id   = matched['id']
             folder_name = matched['name']
         elif intent.get('create_folder'):
             try:
-                parent_id  = intent.get('parent_folder_id')
+                parent_id  = intent.get('parent_folder_id') or None
                 new_folder = _create_drive_folder(creds, folder_name, parent_id)
                 folder_id  = new_folder['id']
                 folder_created = True
