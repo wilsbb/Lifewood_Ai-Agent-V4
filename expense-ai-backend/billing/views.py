@@ -67,6 +67,14 @@ def parse_date_range(request):
     return start, end
 
 
+def get_user_receipts(user):
+    """
+    Returns receipts belonging to this user OR receipts with no user assigned.
+    This handles the case where OCR processed files without a user_id.
+    """
+    return Receipt.objects.filter(Q(user=user) | Q(user__isnull=True))
+
+
 # ─────────────────────────────────────────────
 # CHAT ENDPOINTS
 # ─────────────────────────────────────────────
@@ -75,16 +83,6 @@ def parse_date_range(request):
 @require_POST
 @require_auth
 def send_message(request):
-    """
-    Receives a chat message from the frontend, forwards it to n8n,
-    saves both the user message and agent response to the database.
-
-    POST /api/billing/chat/message/
-    Body: {
-        "message": "How much did we spend on meals this month?",
-        "conversation_id": 1  (optional — omit to start a new conversation)
-    }
-    """
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -96,47 +94,30 @@ def send_message(request):
     if not user_message:
         return JsonResponse({'error': 'Message cannot be empty'}, status=400)
 
-    # Get or create conversation
     if conversation_id:
         try:
-            conversation = Conversation.objects.get(
-                id=conversation_id,
-                user=request.user
-            )
+            conversation = Conversation.objects.get(id=conversation_id, user=request.user)
         except Conversation.DoesNotExist:
             return JsonResponse({'error': 'Conversation not found'}, status=404)
     else:
         title = user_message[:60] + ('...' if len(user_message) > 60 else '')
-        conversation = Conversation.objects.create(
-            user=request.user,
-            title=title,
-        )
+        conversation = Conversation.objects.create(user=request.user, title=title)
 
-    # Save user message
     user_chat_message = ChatMessage.objects.create(
-        conversation=conversation,
-        role='user',
-        content=user_message,
+        conversation=conversation, role='user', content=user_message,
     )
 
-    # Build full conversation history
     history = list(
         conversation.messages
         .exclude(id=user_chat_message.id)
         .values('role', 'content', 'created_at')
         .order_by('created_at')
     )
-
     formatted_history = [
-        {
-            'role': msg['role'],
-            'content': msg['content'],
-            'timestamp': msg['created_at'].isoformat(),
-        }
+        {'role': msg['role'], 'content': msg['content'], 'timestamp': msg['created_at'].isoformat()}
         for msg in history
     ]
 
-    # Forward to n8n
     agent_reply = ''
     agent_metadata = {}
 
@@ -149,38 +130,20 @@ def send_message(request):
                 'user_email': request.user.email,
                 'history': formatted_history,
             }
-
-            n8n_response = http_requests.post(
-                N8N_WEBHOOK_URL,
-                json=n8n_payload,
-                timeout=100,
-            )
+            n8n_response = http_requests.post(N8N_WEBHOOK_URL, json=n8n_payload, timeout=100)
             n8n_response.raise_for_status()
             n8n_data = n8n_response.json()
-
             agent_reply = n8n_data.get('reply', 'No response from agent.')
             agent_metadata = n8n_data.get('metadata', {})
-
         except Exception as e:
             print(f'n8n webhook error: {e}')
-            agent_reply = (
-                'I encountered an issue processing your request. '
-                'Please try again in a moment.'
-            )
+            agent_reply = 'I encountered an issue processing your request. Please try again in a moment.'
     else:
-        agent_reply = (
-            'AI agent is not configured yet. '
-            'Please set the N8N_WEBHOOK_URL environment variable.'
-        )
+        agent_reply = 'AI agent is not configured yet. Please set the N8N_WEBHOOK_URL environment variable.'
 
-    # Save agent response
     agent_chat_message = ChatMessage.objects.create(
-        conversation=conversation,
-        role='agent',
-        content=agent_reply,
-        metadata=agent_metadata,
+        conversation=conversation, role='agent', content=agent_reply, metadata=agent_metadata,
     )
-
     conversation.save()
 
     return JsonResponse({
@@ -195,48 +158,26 @@ def send_message(request):
 @require_GET
 @require_auth
 def get_conversation_history(request):
-    """
-    Returns all messages for a specific conversation.
-
-    GET /api/billing/chat/history/?conversation_id=1
-    """
     conversation_id = request.GET.get('conversation_id')
     if not conversation_id:
         return JsonResponse({'error': 'conversation_id is required'}, status=400)
 
     try:
-        conversation = Conversation.objects.get(
-            id=conversation_id,
-            user=request.user
-        )
+        conversation = Conversation.objects.get(id=conversation_id, user=request.user)
     except Conversation.DoesNotExist:
         return JsonResponse({'error': 'Conversation not found'}, status=404)
 
-    messages = conversation.messages.all().values(
-        'id', 'role', 'content', 'metadata', 'created_at'
-    )
-
+    messages = conversation.messages.all().values('id', 'role', 'content', 'metadata', 'created_at')
     return JsonResponse({
         'conversation_id': conversation.id,
         'title': conversation.title,
-        'messages': [
-            {
-                **msg,
-                'created_at': msg['created_at'].isoformat(),
-            }
-            for msg in messages
-        ],
+        'messages': [{**msg, 'created_at': msg['created_at'].isoformat()} for msg in messages],
     })
 
 
 @require_GET
 @require_auth
 def list_conversations(request):
-    """
-    Returns all conversations for the current user.
-
-    GET /api/billing/chat/conversations/
-    """
     conversations = (
         Conversation.objects
         .filter(user=request.user)
@@ -244,14 +185,9 @@ def list_conversations(request):
         .values('id', 'title', 'created_at', 'updated_at', 'message_count')
         .order_by('-updated_at')
     )
-
     return JsonResponse({
         'conversations': [
-            {
-                **conv,
-                'created_at': conv['created_at'].isoformat(),
-                'updated_at': conv['updated_at'].isoformat(),
-            }
+            {**conv, 'created_at': conv['created_at'].isoformat(), 'updated_at': conv['updated_at'].isoformat()}
             for conv in conversations
         ]
     })
@@ -264,14 +200,6 @@ def list_conversations(request):
 @csrf_exempt
 @require_GET
 def chat_memory(request):
-    """
-    Returns relevant past messages scoped strictly to ONE user.
-    n8n can call this with X-Agent-Secret + user_id param.
-    Frontend users can call this with session auth (own messages only).
-
-    GET /api/billing/chat/memory/?query=vat+receipts&limit=8&user_id=1
-    Header: X-Agent-Secret (for n8n) OR session cookie (for frontend)
-    """
     if _is_n8n_request(request):
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -295,12 +223,10 @@ def chat_memory(request):
         .select_related('conversation')
         .order_by('-created_at')
     )
-
     if query:
         base_qs = base_qs.filter(Q(content__icontains=query))
 
     messages_page = base_qs[:limit]
-
     return JsonResponse({
         'user_id': user.id,
         'query': query,
@@ -326,12 +252,6 @@ def chat_memory(request):
 @csrf_exempt
 @require_POST
 def save_receipt(request):
-    """
-    Called by n8n after OCR processing to save extracted receipt data.
-
-    POST /api/billing/receipts/save/
-    Header: X-Agent-Secret: <N8N_AGENT_SECRET>
-    """
     if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
@@ -351,7 +271,6 @@ def save_receipt(request):
     if user_id:
         user = User.objects.filter(id=user_id).first()
 
-    # Parse expense date
     expense_date = None
     date_str = body.get('expense_date')
     if date_str:
@@ -404,15 +323,11 @@ def save_receipt(request):
 
 @require_GET
 def list_receipts(request):
-    """
-    Returns receipts. Session auth = own receipts. Agent secret = all receipts.
-
-    GET /api/billing/receipts/
-    """
     if _is_n8n_request(request):
         receipts = Receipt.objects.all()
     elif request.user and request.user.is_authenticated:
-        receipts = Receipt.objects.filter(user=request.user)
+        # FIX: include receipts with no user (OCR-processed without user_id)
+        receipts = get_user_receipts(request.user)
     else:
         return JsonResponse({'error': 'Not authenticated'}, status=401)
 
@@ -441,6 +356,8 @@ def list_receipts(request):
                 **r,
                 'expense_date': r['expense_date'].isoformat() if r['expense_date'] else None,
                 'created_at': r['created_at'].isoformat(),
+                'total': str(r['total']),
+                'vat_amount': str(r['vat_amount']),
             }
             for r in data
         ],
@@ -451,13 +368,11 @@ def list_receipts(request):
 @require_GET
 @require_auth
 def get_receipt(request, receipt_id):
-    """
-    Returns full detail for a single receipt.
-
-    GET /api/billing/receipts/<id>/
-    """
     try:
-        receipt = Receipt.objects.get(id=receipt_id, user=request.user)
+        # FIX: also allow access to receipts with no user
+        receipt = Receipt.objects.get(
+            Q(id=receipt_id) & (Q(user=request.user) | Q(user__isnull=True))
+        )
     except Receipt.DoesNotExist:
         return JsonResponse({'error': 'Receipt not found'}, status=404)
 
@@ -497,22 +412,11 @@ def get_receipt(request, receipt_id):
 
 @require_GET
 def list_processed_file_ids(request):
-    """
-    Returns all drive_file_ids that have already been OCR'd and saved.
-    Used by n8n OCR poller to skip already-processed files efficiently.
-
-    GET /api/billing/receipts/processed-ids/
-    Header: X-Agent-Secret: <secret>
-    """
     if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
     file_ids = list(Receipt.objects.values_list('drive_file_id', flat=True))
-
-    return JsonResponse({
-        'processed_file_ids': file_ids,
-        'count': len(file_ids),
-    })
+    return JsonResponse({'processed_file_ids': file_ids, 'count': len(file_ids)})
 
 
 # ─────────────────────────────────────────────
@@ -522,26 +426,20 @@ def list_processed_file_ids(request):
 @require_GET
 @require_auth
 def analytics_summary(request):
-    """
-    Returns high-level spending summary for the date range.
-
-    GET /api/billing/analytics/summary/?start=2024-01-01&end=2024-12-31
-    """
     start, end = parse_date_range(request)
     user = request.user
 
-    base_qs = Receipt.objects.filter(
-        user=user,
+    # FIX: include receipts with no user assigned
+    base_qs = get_user_receipts(user).filter(
         status='processed',
         expense_date__range=[start, end],
     )
 
     duration = (end - start).days
     prev_end = start - timedelta(days=1)
-    prev_start = prev_end - timedelta(days=duration)
+    prev_start = prev_end - timedelta(days=max(duration, 1))
 
-    prev_qs = Receipt.objects.filter(
-        user=user,
+    prev_qs = get_user_receipts(user).filter(
         status='processed',
         expense_date__range=[prev_start, prev_end],
     )
@@ -582,15 +480,10 @@ def analytics_summary(request):
 @require_GET
 @require_auth
 def analytics_by_category(request):
-    """
-    Returns spend broken down by expense category.
-
-    GET /api/billing/analytics/by-category/?start=2024-01-01&end=2024-12-31
-    """
     start, end = parse_date_range(request)
 
-    base_qs = Receipt.objects.filter(
-        user=request.user,
+    # FIX: include receipts with no user assigned
+    base_qs = get_user_receipts(request.user).filter(
         status='processed',
         expense_date__range=[start, end],
     )
@@ -628,21 +521,17 @@ def analytics_by_category(request):
 @require_GET
 @require_auth
 def analytics_trends(request):
-    """
-    Returns monthly spending trend for the past 12 months.
-
-    GET /api/billing/analytics/trends/
-    """
     today = timezone.now().date()
     twelve_months_ago = today.replace(day=1) - timedelta(days=365)
 
+    # FIX: include receipts with no user assigned
+    base_qs = get_user_receipts(request.user).filter(
+        status='processed',
+        expense_date__gte=twelve_months_ago,
+    )
+
     monthly = (
-        Receipt.objects
-        .filter(
-            user=request.user,
-            status='processed',
-            expense_date__gte=twelve_months_ago,
-        )
+        base_qs
         .annotate(month=TruncMonth('expense_date'))
         .values('month')
         .annotate(
@@ -655,14 +544,8 @@ def analytics_trends(request):
     )
 
     from django.db.models.functions import ExtractWeekDay
-
     by_weekday = (
-        Receipt.objects
-        .filter(
-            user=request.user,
-            status='processed',
-            expense_date__gte=twelve_months_ago,
-        )
+        base_qs
         .annotate(weekday=ExtractWeekDay('expense_date'))
         .values('weekday')
         .annotate(total_spend=Sum('total'), count=Count('id'))
@@ -700,13 +583,6 @@ def analytics_trends(request):
 @csrf_exempt
 @require_POST
 def n8n_analytics_proxy(request):
-    """
-    Allows n8n to fetch all analytics in one call using the agent secret.
-
-    POST /api/billing/n8n/analytics/
-    Header: X-Agent-Secret: <N8N_AGENT_SECRET>
-    Body: { "user_id": 1 }
-    """
     if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
@@ -726,16 +602,15 @@ def n8n_analytics_proxy(request):
     today = timezone.now().date()
     start = today.replace(day=1)
 
-    base_qs = Receipt.objects.filter(
-        user=user,
+    # FIX: include receipts with no user assigned
+    base_qs = get_user_receipts(user).filter(
         status='processed',
         expense_date__range=[start, today],
     )
 
     prev_end = start - timedelta(days=1)
     prev_start = prev_end.replace(day=1)
-    prev_total = Receipt.objects.filter(
-        user=user,
+    prev_total = get_user_receipts(user).filter(
         status='processed',
         expense_date__range=[prev_start, prev_end],
     ).aggregate(total=Sum('total'))['total'] or Decimal('0')
@@ -755,8 +630,7 @@ def n8n_analytics_proxy(request):
     )
 
     recent_receipts = list(
-        Receipt.objects
-        .filter(user=user, status='processed')
+        get_user_receipts(user).filter(status='processed')
         .order_by('-expense_date')[:20]
         .values(
             'business_name', 'expense_category', 'document_type',
@@ -805,14 +679,6 @@ def n8n_analytics_proxy(request):
 
 @csrf_exempt
 def process_ocr(request):
-    """
-    Called by n8n to download a Drive file, run OCR via OpenRouter,
-    and save the result directly to the database.
-
-    POST /api/billing/receipts/process-ocr/
-    Header: X-Agent-Secret: <N8N_AGENT_SECRET>
-    Body: { "file_id": "...", "file_name": "...", "folder_id": "...", "folder_name": "..." }
-    """
     if not _is_n8n_request(request):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
@@ -829,12 +695,10 @@ def process_ocr(request):
     if not file_id:
         return JsonResponse({'error': 'file_id is required'}, status=400)
 
-    # Get Google Drive credentials
     creds = _get_n8n_credentials()
     if not creds:
         return JsonResponse({'error': 'No stored Google credentials.'}, status=401)
 
-    # Download file from Google Drive
     try:
         from googleapiclient.discovery import build
         service = build('drive', 'v3', credentials=creds)
@@ -845,7 +709,6 @@ def process_ocr(request):
     except Exception as e:
         return JsonResponse({'error': f'Failed to download file: {str(e)}'}, status=500)
 
-    # Call OpenRouter
     openrouter_key = os.environ.get('OPENROUTER_API_KEY')
     if not openrouter_key:
         return JsonResponse({'error': 'OPENROUTER_API_KEY not configured'}, status=500)
@@ -885,27 +748,15 @@ Rules:
     try:
         response = http_requests.post(
             'https://openrouter.ai/api/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {openrouter_key}',
-                'Content-Type': 'application/json',
-            },
+            headers={'Authorization': f'Bearer {openrouter_key}', 'Content-Type': 'application/json'},
             json={
                 'model': 'openai/gpt-4o',
                 'max_tokens': 1024,
                 'messages': [{
                     'role': 'user',
                     'content': [
-                        {
-                            'type': 'image_url',
-                            'image_url': {
-                                'url': f'data:{mime_type};base64,{base64_image}',
-                                'detail': 'high'
-                            }
-                        },
-                        {
-                            'type': 'text',
-                            'text': ocr_prompt
-                        }
+                        {'type': 'image_url', 'image_url': {'url': f'data:{mime_type};base64,{base64_image}', 'detail': 'high'}},
+                        {'type': 'text', 'text': ocr_prompt}
                     ]
                 }]
             },
@@ -916,20 +767,12 @@ Rules:
     except Exception as e:
         return JsonResponse({'error': f'OpenRouter call failed: {str(e)}'}, status=500)
 
-    # Parse OCR response
     try:
         cleaned = reply.replace('```json', '').replace('```', '').strip()
         ocr_data = json.loads(cleaned)
     except Exception:
-        ocr_data = {
-            'document_type': 'unknown',
-            'vat_type': 'unknown',
-            'expense_category': 'uncategorized',
-            'business_name': '',
-            'total': 0,
-        }
+        ocr_data = {'document_type': 'unknown', 'vat_type': 'unknown', 'expense_category': 'uncategorized', 'business_name': '', 'total': 0}
 
-    # Parse expense date
     expense_date = None
     date_str = ocr_data.get('expense_date', '')
     if date_str:
@@ -940,7 +783,6 @@ Rules:
             except ValueError:
                 continue
 
-    # Save receipt directly in Django
     Receipt.objects.update_or_create(
         drive_file_id=file_id,
         defaults={
@@ -971,8 +813,4 @@ Rules:
         }
     )
 
-    return JsonResponse({
-        'status': 'ok',
-        'file_id': file_id,
-        'file_name': file_name,
-    })
+    return JsonResponse({'status': 'ok', 'file_id': file_id, 'file_name': file_name})
