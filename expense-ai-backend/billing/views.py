@@ -67,19 +67,21 @@ def get_user_receipts(user):
 # ─────────────────────────────────────────────
 
 def _build_analytics_context(user):
-    """Fetch this month's analytics directly from the DB for the AI system prompt."""
+    """
+    Fetch analytics from the DB for the AI system prompt.
+    Includes ALL-TIME folder-based totals (the user's true categorization)
+    plus this month's summary and recent receipts.
+    """
     today = timezone.now().date()
     start = today.replace(day=1)
+    all_receipts = get_user_receipts(user).filter(status='processed')
 
-    base_qs = get_user_receipts(user).filter(
-        status='processed',
-        expense_date__range=[start, today],
-    )
+    # ── This month ─────────────────────────────────────────────────────────
+    base_qs = all_receipts.filter(expense_date__range=[start, today])
 
     prev_end = start - timedelta(days=1)
     prev_start = prev_end.replace(day=1)
-    prev_total = get_user_receipts(user).filter(
-        status='processed',
+    prev_total = all_receipts.filter(
         expense_date__range=[prev_start, prev_end],
     ).aggregate(t=Sum('total'))['t'] or Decimal('0')
 
@@ -90,18 +92,33 @@ def _build_analytics_context(user):
         avg_transaction=Avg('total'),
     )
 
-    categories = list(
-        base_qs.values('expense_category')
-        .annotate(total=Sum('total'), count=Count('id'))
-        .order_by('-total')[:6]
+    # ── ALL-TIME spending by folder (user-defined category) ────────────────
+    # drive_folder_name is the authoritative category — set by the user
+    # when they physically organised receipts into Google Drive folders.
+    by_folder_alltime = list(
+        all_receipts
+        .exclude(drive_folder_name='')
+        .values('drive_folder_name')
+        .annotate(total=Sum('total'), vat=Sum('vat_amount'), count=Count('id'))
+        .order_by('-total')
     )
 
+    # ── This month spending by folder ─────────────────────────────────────
+    by_folder_month = list(
+        base_qs
+        .exclude(drive_folder_name='')
+        .values('drive_folder_name')
+        .annotate(total=Sum('total'), vat=Sum('vat_amount'), count=Count('id'))
+        .order_by('-total')
+    )
+
+    # ── Recent receipts (last 15, all time) ───────────────────────────────
     recent = list(
-        get_user_receipts(user).filter(status='processed')
-        .order_by('-expense_date')[:10]
-        .values('business_name', 'expense_category', 'document_type',
-                'total', 'vat_amount', 'expense_date', 'description',
-                'tin', 'receipt_number', 'vat_type', 'bir_permit_number')
+        all_receipts
+        .order_by('-expense_date')[:15]
+        .values('business_name', 'drive_folder_name', 'expense_category',
+                'document_type', 'total', 'vat_amount', 'expense_date',
+                'description', 'tin', 'receipt_number', 'vat_type', 'bir_permit_number')
     )
 
     total_spend = summary['total_spend'] or Decimal('0')
@@ -113,29 +130,40 @@ def _build_analytics_context(user):
     if prev_total > 0:
         change_pct = float((total_spend - prev_total) / prev_total * 100)
 
-    cat_lines = '\n'.join(
-        f"  - {c['expense_category']}: PHP {c['total']} ({c['count']} receipts)"
-        for c in categories
-    ) or '  (no category data)'
+    folder_alltime_lines = '\n'.join(
+        f"  - {f['drive_folder_name']}: PHP {f['total']} "
+        f"(VAT: PHP {f['vat']}, {f['count']} receipts)"
+        for f in by_folder_alltime
+    ) or '  (no folder data yet)'
+
+    folder_month_lines = '\n'.join(
+        f"  - {f['drive_folder_name']}: PHP {f['total']} ({f['count']} receipts)"
+        for f in by_folder_month
+    ) or '  (no receipts this month)'
 
     recent_lines = '\n'.join(
-        f"  - {r['expense_date'] or 'Unknown'} | {r['business_name'] or 'Unknown'} | "
-        f"PHP {r['total']} | {r['expense_category']} | VAT: {r['vat_type']} | "
-        f"TIN: {r['tin'] or 'missing'} | Receipt#: {r['receipt_number'] or 'missing'}"
+        f"  - {r['expense_date'] or 'Unknown'} | "
+        f"Folder: {r['drive_folder_name'] or 'Uncategorized'} | "
+        f"{r['business_name'] or 'Unknown'} | PHP {r['total']} | "
+        f"VAT: {r['vat_type']} | TIN: {r['tin'] or 'missing'} | "
+        f"Receipt#: {r['receipt_number'] or 'missing'}"
         for r in recent
     ) or '  (no receipts yet)'
 
-    return f"""=== FINANCIAL SUMMARY (This Month: {start} to {today}) ===
+    return f"""=== THIS MONTH SUMMARY ({start} to {today}) ===
 Total Spent      : PHP {total_spend}
 VAT Paid         : PHP {total_vat}
 Transactions     : {tx_count}
 Avg per Receipt  : PHP {avg_tx}
 vs Last Month    : {change_pct:+.1f}% (last month: PHP {prev_total})
 
-Top Expense Categories:
-{cat_lines}
+=== THIS MONTH BY FOLDER (user-defined categories) ===
+{folder_month_lines}
 
-Recent Receipts (last 10):
+=== ALL-TIME SPENDING BY FOLDER (user-defined categories) ===
+{folder_alltime_lines}
+
+=== RECENT RECEIPTS (last 15) ===
 {recent_lines}"""
 
 
@@ -260,6 +288,11 @@ Guidelines:
 - You can only see this user's own expense data
 - When asked about BIR compliance, reference Philippine BIR rules (VAT registration, TIN requirements, official receipts, BIR permit numbers)
 - Flag any receipts missing TIN, receipt number, or BIR permit number as compliance risks
+
+IMPORTANT — HOW CATEGORIES WORK:
+The user organises receipts by placing them into named Google Drive folders. The folder name is the TRUE and AUTHORITATIVE expense category. For example, a folder called "Condo Dues" contains all condo-related receipts, "Admin Expenses" contains all admin receipts, etc.
+When the user asks "how much did we spend on X?", match X against the folder names in the data below (case-insensitive, partial match is fine). Always answer using folder-based totals, not the system-guessed expense_category field.
+If the user asks about a folder that has no data, say so clearly.
 
 {analytics_context}
 
