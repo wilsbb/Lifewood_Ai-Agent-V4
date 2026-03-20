@@ -10,3 +10,4 @@ python-dotenv
 dj-database-url
 whitenoise 
 requests
+openpyxl

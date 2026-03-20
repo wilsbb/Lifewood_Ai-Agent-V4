@@ -81,24 +81,24 @@ const msgBubble = (role) => ({
 const SUGGESTIONS = [
   'How much did I spend this month?',
   'Show spending by folder',
+  'Export all receipts to Excel',
   'Are my receipts BIR compliant?',
-  'How much for Admin Expense?',
 ];
 
 const BUBBLES = [
   'How may I help you today?',
   'Upload a receipt to scan it! 📎',
   'Ask me how much you spend this month!',
+  'Export receipts to Excel 📊',
   'Check if receipts are BIR compliant',
   'Ask for spending by folder',
   'Need help reviewing a receipt?',
   'Want a quick expense summary?',
-  'Ask for monthly trends',
   'Need VAT guidance?',
 ];
 
-const FAB_SIZE    = 56;
-const GAP         = 12;
+const FAB_SIZE     = 56;
+const GAP          = 12;
 const PANEL_OFFSET = 68;
 
 export default function ChatPanel({ conversationId, onConversationCreate }) {
@@ -108,10 +108,10 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
   const [convId,   setConvId]   = useState(conversationId || null);
 
   // ── Draggable FAB state ────────────────────────────────────────────────
-  const [headPos,    setHeadPos]    = useState({ right: 12, bottom: 28 });
-  const [dragVisual, setDragVisual] = useState(null);
-  const [panelPos,   setPanelPos]   = useState(null);
-  const [snapping,   setSnapping]   = useState(false);
+  const [headPos,     setHeadPos]     = useState({ right: 12, bottom: 28 });
+  const [dragVisual,  setDragVisual]  = useState(null);
+  const [panelPos,    setPanelPos]    = useState(null);
+  const [snapping,    setSnapping]    = useState(false);
   const [bubbleIndex, setBubbleIndex] = useState(0);
   const [bubbleAnim,  setBubbleAnim]  = useState('bubble-in');
   const [bubbleSide,  setBubbleSide]  = useState('right');
@@ -122,19 +122,22 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
   const bubbleRef    = useRef(null);
   const panelRef     = useRef(null);
   const panelSize    = useRef({ w: 380, h: 580 });
-  const dragState    = useRef({ dragging: false, moved: false, startX: 0, startY: 0, startRight: 0, startBottom: 0 });
+  const dragState    = useRef({
+    dragging: false, moved: false,
+    startX: 0, startY: 0, startRight: 0, startBottom: 0,
+  });
 
   const currentRight  = dragVisual?.right  ?? headPos.right;
   const currentBottom = dragVisual?.bottom ?? headPos.bottom;
 
-  // ── Load conversation history when panel opens ─────────────────────────
+  // ── Load history when opened ───────────────────────────────────────────
   useEffect(() => {
     if (open && convId) {
       fetchHistory(convId).then(d => setMessages(d.messages || [])).catch(() => {});
     }
   }, [open, convId]);
 
-  // ── Scroll to bottom on new messages ──────────────────────────────────
+  // ── Scroll to bottom ───────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -150,12 +153,12 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       }, 220);
     }, 6000);
     return () => window.clearInterval(id);
-  }, [open, BUBBLES.length]);
+  }, [open]);
 
-  // ── Bubble side (left/right based on FAB position) ─────────────────────
+  // ── Bubble side based on FAB position ─────────────────────────────────
   useEffect(() => {
     if (open) return;
-    const vw = window.innerWidth;
+    const vw          = window.innerWidth;
     const bubbleWidth = bubbleRef.current?.offsetWidth || 220;
     const bubbleGap   = 72;
     const fabLeft     = vw - currentRight - FAB_SIZE;
@@ -169,25 +172,25 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       const saved = window.localStorage.getItem('lwChatHeadPos');
       if (saved) {
         const parsed = JSON.parse(saved);
-        const vw = window.innerWidth;
+        const vw       = window.innerWidth;
         const maxRight = Math.max(12, vw - FAB_SIZE - 12);
         if (typeof parsed?.right === 'number' && typeof parsed?.bottom === 'number') {
-          const fabLeft  = vw - parsed.right - FAB_SIZE;
+          const fabLeft   = vw - parsed.right - FAB_SIZE;
           const snapRight = fabLeft < vw / 2 ? maxRight : 12;
           setHeadPos({ right: snapRight, bottom: parsed.bottom });
         } else if ((parsed?.side === 'left' || parsed?.side === 'right') && typeof parsed?.bottom === 'number') {
-          setHeadPos({ right: parsed.side === 'left' ? Math.max(12, vw - FAB_SIZE - 12) : 12, bottom: parsed.bottom });
+          setHeadPos({ right: parsed.side === 'left' ? maxRight : 12, bottom: parsed.bottom });
         }
       }
     } catch {}
   }, []);
 
-  // ── Position panel relative to FAB when opened ────────────────────────
+  // ── Position panel relative to FAB ────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     const id = requestAnimationFrame(() => {
       updatePanelSize();
-      const vw = window.innerWidth;
+      const vw        = window.innerWidth;
       const fabLeft   = vw - currentRight - FAB_SIZE;
       const openRight = fabLeft < vw / 2;
       const targetLeft = openRight
@@ -198,20 +201,20 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
     return () => cancelAnimationFrame(id);
   }, [open, currentRight, currentBottom]);
 
-  // ── Save FAB position to localStorage ─────────────────────────────────
+  // ── Save FAB position ──────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     try { window.localStorage.setItem('lwChatHeadPos', JSON.stringify(headPos)); } catch {}
   }, [headPos, open]);
 
-  // ── Reset FAB on panel close ──────────────────────────────────────────
+  // ── Reset on close ─────────────────────────────────────────────────────
   useEffect(() => {
     if (open) return;
     setHeadPos({ right: 12, bottom: 28 });
     setDragVisual(null);
   }, [open]);
 
-  // ── Global mouse move/up for drag ─────────────────────────────────────
+  // ── Global drag listeners ──────────────────────────────────────────────
   useEffect(() => {
     const handleMove = (e) => {
       if (!dragState.current.dragging) return;
@@ -220,11 +223,11 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
       const next = clampPos(
         { right: Math.max(12, dragState.current.startRight - dx), bottom: Math.max(12, dragState.current.startBottom - dy) },
-        { w: FAB_SIZE, h: FAB_SIZE }
+        { w: FAB_SIZE, h: FAB_SIZE },
       );
       setDragVisual(next);
       if (open) {
-        const vw = window.innerWidth;
+        const vw        = window.innerWidth;
         const fabLeft   = vw - next.right - FAB_SIZE;
         const openRight = fabLeft < vw / 2;
         const targetLeft = openRight ? fabLeft + FAB_SIZE + GAP : fabLeft - panelSize.current.w - GAP;
@@ -235,9 +238,9 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
     const handleUp = () => {
       dragState.current.dragging = false;
       if (!dragVisual) return;
-      const vw       = window.innerWidth;
-      const maxRight = Math.max(12, vw - FAB_SIZE - 12);
-      const fabLeft  = vw - dragVisual.right - FAB_SIZE;
+      const vw        = window.innerWidth;
+      const maxRight  = Math.max(12, vw - FAB_SIZE - 12);
+      const fabLeft   = vw - dragVisual.right - FAB_SIZE;
       const snapRight = fabLeft < vw / 2 ? maxRight : 12;
       const snapped   = { right: snapRight, bottom: dragVisual.bottom };
       setSnapping(true);
@@ -260,20 +263,20 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
     };
   }, [dragVisual, open]);
 
-  // ── Window resize ─────────────────────────────────────────────────────
+  // ── Window resize ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleResize = () => {
       updatePanelSize();
       const base = { right: currentRight, bottom: currentBottom };
       if (open) {
-        const vw = window.innerWidth;
+        const vw        = window.innerWidth;
         const fabLeft   = vw - base.right - FAB_SIZE;
         const openRight = fabLeft < vw / 2;
         const targetLeft = openRight ? fabLeft + FAB_SIZE + GAP : fabLeft - panelSize.current.w - GAP;
         setPanelPos(clampPanel({ left: targetLeft, bottom: base.bottom + PANEL_OFFSET }, panelSize.current));
       }
-      const clamped   = clampPos(base, { w: FAB_SIZE, h: FAB_SIZE });
-      const maxRight  = Math.max(12, window.innerWidth - FAB_SIZE - 12);
+      const clamped  = clampPos(base, { w: FAB_SIZE, h: FAB_SIZE });
+      const maxRight = Math.max(12, window.innerWidth - FAB_SIZE - 12);
       setHeadPos({ right: clamped.right > 12 ? maxRight : 12, bottom: clamped.bottom });
       setDragVisual(null);
     };
@@ -314,7 +317,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
     };
   };
 
-  // ── Send handler — supports plain messages AND file attachments ─────────
+  // ── Send handler — plain messages AND file uploads ─────────────────────
   const handleSend = async (msg, file = null) => {
     if (!msg && !file) return;
     if (loading) return;
@@ -334,7 +337,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       let data;
 
       if (file) {
-        // ── Multipart upload to receipt upload endpoint ──────────────────
+        // ── Receipt image upload ─────────────────────────────────────────
         const formData = new FormData();
         formData.append('file', file);
         formData.append('message', msg || 'Please process this receipt.');
@@ -353,7 +356,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
         data = await res.json();
 
       } else {
-        // ── Normal JSON chat message ─────────────────────────────────────
+        // ── Normal text message ──────────────────────────────────────────
         const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
         const res = await fetch(`${BASE_URL}/api/billing/chat/message/`, {
           method: 'POST',
@@ -374,9 +377,10 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       }
 
       setMessages(prev => [...prev, {
-        role: 'agent',
-        content: data.reply || data.message || 'No response',
-        id: Date.now() + 1,
+        role:     'agent',
+        content:  data.reply || data.message || 'No response',
+        id:       Date.now() + 1,
+        metadata: data.metadata || {},
       }]);
 
     } catch (err) {
@@ -406,7 +410,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
         style={{
           ...panelStyle(open, dragState.current.dragging),
           left:   panelPos ? `${panelPos.left}px`   : 'auto',
-          right:  panelPos ? 'auto' : 'var(--lw-chat-right)',
+          right:  panelPos ? 'auto'                 : 'var(--lw-chat-right)',
           bottom: panelPos ? `${panelPos.bottom}px` : 'var(--lw-chat-bottom)',
           transition: dragState.current.dragging
             ? 'none'
@@ -417,9 +421,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       >
         {/* Header */}
         <div style={headerStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <img alt="Lifewood" src={LOGO_URL} style={{ height: '26px', width: 'auto' }} />
-          </div>
+          <img alt="Lifewood" src={LOGO_URL} style={{ height: '26px', width: 'auto', flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: '14px', fontWeight: 700, color: 'var(--lw-text)' }}>
               Expense AI
@@ -452,8 +454,8 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px' }}>
               <div style={{ textAlign: 'center', padding: '14px 0' }}>
                 <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: '13px', color: 'var(--lw-muted)', lineHeight: 1.6 }}>
-                  Ask about your expenses or<br />
-                  <strong style={{ color: 'var(--lw-accent-deep)' }}>📎 attach a receipt</strong> to scan &amp; upload it
+                  Ask about your expenses, export to Excel,<br />
+                  or <strong style={{ color: 'var(--lw-accent-deep)' }}>📎 attach a receipt</strong> to scan &amp; upload it
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -492,6 +494,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
               timestamp={m.timestamp}
               error={m.error}
               receipts={m.receipts || []}
+              metadata={m.metadata || {}}
             />
           ))}
 
@@ -535,17 +538,14 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
         aria-label={open ? 'Close chat' : 'Open chat'}
       >
         {/* Aura glow */}
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute', inset: '-18px', borderRadius: '30px',
-            background: 'radial-gradient(circle at 50% 50%, rgba(255,179,71,0.75) 0%, rgba(255,179,71,0.3) 55%, rgba(255,179,71,0) 85%)',
-            filter: 'blur(9px)',
-            opacity: open ? 1 : 0.92,
-            animation: 'ai-aura 2.2s ease-in-out infinite, ai-glow 2.6s ease-in-out infinite',
-            zIndex: 0, pointerEvents: 'none',
-          }}
-        />
+        <span aria-hidden="true" style={{
+          position: 'absolute', inset: '-18px', borderRadius: '30px',
+          background: 'radial-gradient(circle at 50% 50%, rgba(255,179,71,0.75) 0%, rgba(255,179,71,0.3) 55%, rgba(255,179,71,0) 85%)',
+          filter: 'blur(9px)',
+          opacity: open ? 1 : 0.92,
+          animation: 'ai-aura 2.2s ease-in-out infinite, ai-glow 2.6s ease-in-out infinite',
+          zIndex: 0, pointerEvents: 'none',
+        }} />
 
         {/* Bubble hint */}
         {!open && (
@@ -554,7 +554,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
             style={{
               position: 'absolute',
               right:  bubbleSide === 'right' ? 'auto' : '72px',
-              left:   bubbleSide === 'right' ? '72px' : 'auto',
+              left:   bubbleSide === 'right' ? '72px'  : 'auto',
               bottom: '6px',
               background: 'rgba(255,255,255,0.65)',
               border: '2px solid rgba(19,48,32,0.25)',
@@ -576,34 +576,31 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
         )}
 
         {/* Bot icon */}
-        <span
-          className="lw-ai-icon"
-          style={{
-            width: '32px', height: '32px', borderRadius: '50%',
-            background: open ? 'var(--lw-sea-salt)' : '#ffd89b',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--lw-dark)',
-            animation: open
-              ? 'ai-open 0.5s ease-out, ai-idle 2.8s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite'
-              : 'ai-idle 3.2s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite',
-            zIndex: 1,
-          }}
-        >
+        <span className="lw-ai-icon" style={{
+          width: '32px', height: '32px', borderRadius: '50%',
+          background: open ? 'var(--lw-sea-salt)' : '#ffd89b',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--lw-dark)',
+          animation: open
+            ? 'ai-open 0.5s ease-out, ai-idle 2.8s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite'
+            : 'ai-idle 3.2s ease-in-out infinite, ai-beat 1.8s ease-in-out infinite',
+          zIndex: 1,
+        }}>
           <Bot size={16} strokeWidth={2.2} />
         </span>
       </button>
 
       <style>{`
-        @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-6px);opacity:1} }
-        @keyframes ai-open { 0%{transform:scale(.7) rotate(-18deg);opacity:.6} 60%{transform:scale(1.1) rotate(6deg);opacity:1} 100%{transform:scale(1) rotate(0deg)} }
-        @keyframes ai-idle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
-        @keyframes ai-beat { 0%,100%{transform:scale(1)} 45%{transform:scale(1.06)} 60%{transform:scale(.98)} 75%{transform:scale(1.03)} }
-        @keyframes ai-aura { 0%,100%{transform:scale(.98);opacity:.6} 50%{transform:scale(1.12);opacity:1} }
-        @keyframes ai-glow { 0%,100%{filter:blur(6px)} 50%{filter:blur(14px)} }
-        @keyframes bubble-float { 0%,100%{transform:translateY(0);opacity:.95} 50%{transform:translateY(-4px);opacity:1} }
-        @keyframes bubble-in  { from{transform:translateY(6px) scale(.98);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
-        @keyframes bubble-out { from{transform:translateY(0) scale(1);opacity:1} to{transform:translateY(-6px) scale(.98);opacity:0} }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes bounce   { 0%,80%,100%{transform:translateY(0);opacity:.4}   40%{transform:translateY(-6px);opacity:1} }
+        @keyframes ai-open  { 0%{transform:scale(.7) rotate(-18deg);opacity:.6} 60%{transform:scale(1.1) rotate(6deg);opacity:1} 100%{transform:scale(1) rotate(0deg)} }
+        @keyframes ai-idle  { 0%,100%{transform:translateY(0)}  50%{transform:translateY(-2px)} }
+        @keyframes ai-beat  { 0%,100%{transform:scale(1)} 45%{transform:scale(1.06)} 60%{transform:scale(.98)} 75%{transform:scale(1.03)} }
+        @keyframes ai-aura  { 0%,100%{transform:scale(.98);opacity:.6} 50%{transform:scale(1.12);opacity:1} }
+        @keyframes ai-glow  { 0%,100%{filter:blur(6px)} 50%{filter:blur(14px)} }
+        @keyframes bubble-float { 0%,100%{transform:translateY(0);opacity:.95}  50%{transform:translateY(-4px);opacity:1} }
+        @keyframes bubble-in    { from{transform:translateY(6px) scale(.98);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+        @keyframes bubble-out   { from{transform:translateY(0) scale(1);opacity:1}     to{transform:translateY(-6px) scale(.98);opacity:0} }
+        @keyframes pulse        { 0%,100%{opacity:1} 50%{opacity:.4} }
         .lw-ai-icon { transition: transform .2s ease, filter .2s ease; }
         button:hover .lw-ai-icon { transform: scale(1.08) rotate(-6deg); filter: drop-shadow(0 8px 12px rgba(255,179,71,.35)); }
       `}</style>

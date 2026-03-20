@@ -234,6 +234,127 @@ def send_message(request):
     if not user_message:
         return JsonResponse({'error': 'Message cannot be empty'}, status=400)
 
+
+    # ── Export intent detection ────────────────────────────────────────────
+    # Detect BEFORE normal chat processing so we short-circuit cleanly.
+    EXPORT_KEYWORDS = ['export', 'excel', 'xlsx', 'spreadsheet', 'download receipts']
+    msg_lower = user_message.lower()
+    if any(kw in msg_lower for kw in EXPORT_KEYWORDS):
+
+        # ── Get all folder names from DB for matching ──────────────────────
+        all_folder_names = list(
+            get_user_receipts(request.user)
+            .filter(status='processed')
+            .exclude(drive_folder_name='')
+            .values_list('drive_folder_name', flat=True)
+            .distinct()
+        )
+        folder_list_text = '\n'.join(f'  - {f}' for f in all_folder_names) or '  (none)'
+
+        # ── Ask GPT to extract the folder name the user is referring to ────
+        folder_filter = ''
+        try:
+            api_key = os.environ.get('OPENROUTER_API_KEY', '')
+            if api_key and all_folder_names:
+                extract_resp = http_requests.post(
+                    'https://openrouter.ai/api/v1/chat/completions',
+                    headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+                    json={
+                        'model': 'openai/gpt-4o',
+                        'max_tokens': 80,
+                        'messages': [{
+                            'role': 'user',
+                            'content': (
+                                f'The user said: "{user_message}"\n\n'
+                                f'Available folder names:\n{folder_list_text}\n\n'
+                                'Which folder name from the list above is the user referring to?\n'
+                                'Return ONLY the exact folder name from the list, or "ALL" if they want all folders, '
+                                'or "UNKNOWN" if unclear. No explanation, just the name.'
+                            )
+                        }],
+                    },
+                    timeout=15,
+                )
+                extracted = extract_resp.json()['choices'][0]['message']['content'].strip().strip('"')
+                if extracted not in ('ALL', 'UNKNOWN', '') and extracted in all_folder_names:
+                    folder_filter = extracted
+                elif extracted not in ('ALL', 'UNKNOWN', ''):
+                    # Fuzzy fallback: find closest match
+                    ext_lower = extracted.lower()
+                    for fname in all_folder_names:
+                        if ext_lower in fname.lower() or fname.lower() in ext_lower:
+                            folder_filter = fname
+                            break
+        except Exception as e:
+            print(f'Export folder extraction error: {e}')
+            # Fall back to simple substring match
+            for fname in all_folder_names:
+                if fname.lower() in msg_lower:
+                    folder_filter = fname
+                    break
+
+        # ── Build download URL ─────────────────────────────────────────────
+        from urllib.parse import urlencode, quote
+        base_url     = os.environ.get('BACKEND_URL', '').rstrip('/')
+        query_string = f'?folder={quote(folder_filter)}' if folder_filter else ''
+        download_url = f'{base_url}/api/billing/receipts/export/{query_string}'
+
+        # Count matching receipts
+        qs_count = get_user_receipts(request.user).filter(status='processed')
+        if folder_filter:
+            qs_count = qs_count.filter(drive_folder_name__icontains=folder_filter)
+        receipt_count = qs_count.count()
+
+        if folder_filter:
+            reply = (
+                f"Your Excel export for the **{folder_filter}** folder is ready — "
+                f"{receipt_count} receipt{'s' if receipt_count != 1 else ''}. "
+                f"Click the download button below."
+            )
+        elif receipt_count > 0:
+            reply = (
+                f"Your Excel export of all receipts is ready — "
+                f"{receipt_count} total receipt{'s' if receipt_count != 1 else ''}. "
+                f"Click the download button below."
+            )
+        else:
+            reply = (
+                "I couldn't find any matching receipts to export. "
+                "Please check the folder name and try again."
+            )
+
+        # ── Save to conversation ───────────────────────────────────────────
+        if conversation_id:
+            try:
+                conversation = Conversation.objects.get(id=conversation_id, user=request.user)
+            except Conversation.DoesNotExist:
+                conversation = Conversation.objects.create(user=request.user, title=user_message[:60])
+        else:
+            conversation = Conversation.objects.create(user=request.user, title=user_message[:60])
+
+        user_chat_msg = ChatMessage.objects.create(
+            conversation=conversation, role='user', content=user_message)
+        agent_meta = {
+            'download_url':   download_url,
+            'export':         True,
+            'folder_filter':  folder_filter,
+            'receipt_count':  receipt_count,
+        }
+        agent_msg = ChatMessage.objects.create(
+            conversation=conversation, role='agent',
+            content=reply, metadata=agent_meta,
+        )
+        conversation.save()
+
+        return JsonResponse({
+            'conversation_id':  conversation.id,
+            'user_message_id':  user_chat_msg.id,
+            'agent_message_id': agent_msg.id,
+            'reply':            reply,
+            'metadata':         agent_meta,
+        })
+
+
     # ── Get or create conversation ─────────────────────────────────────────
     if conversation_id:
         try:
@@ -1598,3 +1719,231 @@ Rules:
         'file_id': file_id,
         'folder_name': resolved_folder_name,
     })
+
+
+# ─────────────────────────────────────────────
+# EXCEL EXPORT ENDPOINT
+# ─────────────────────────────────────────────
+
+@require_GET
+@require_auth
+def export_receipts_excel(request):
+    """
+    Streams an Excel file of processed receipts.
+    ?folder=<name>  — filter by drive_folder_name (icontains match)
+    ?start=YYYY-MM-DD&end=YYYY-MM-DD  — optional date range filter
+    Column headers have a green background as requested.
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from django.http import HttpResponse
+    except ImportError:
+        return JsonResponse({'error': 'openpyxl not installed. Add it to requirements.txt.'}, status=500)
+
+    import io
+    from django.utils import timezone as tz
+
+    # ── Filters ────────────────────────────────────────────────────────────
+    qs = get_user_receipts(request.user).filter(status='processed')
+
+    folder_filter = request.GET.get('folder', '').strip()
+    if folder_filter:
+        qs = qs.filter(drive_folder_name__icontains=folder_filter)
+
+    start_str = request.GET.get('start', '')
+    end_str   = request.GET.get('end', '')
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date   = datetime.strptime(end_str,   '%Y-%m-%d').date()
+            qs = qs.filter(expense_date__range=[start_date, end_date])
+        except ValueError:
+            pass
+
+    qs = qs.select_related('user').order_by('drive_folder_name', '-expense_date')
+    receipts = list(qs)
+
+    # ── Workbook ────────────────────────────────────────────────────────────
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Receipts Export'
+
+    # ── Styles ─────────────────────────────────────────────────────────────
+    # Green header background (Lifewood dark green)
+    HEADER_FILL = PatternFill('solid', fgColor='046241')
+    ALT_FILL    = PatternFill('solid', fgColor='F0FBF6')   # light mint alternating row
+    WHITE_FILL  = PatternFill('solid', fgColor='FFFFFF')
+    TOTAL_FILL  = PatternFill('solid', fgColor='FFB347')   # amber totals row
+
+    HEADER_FONT = Font(name='Calibri', bold=True, color='FFFFFF', size=10)
+    BODY_FONT   = Font(name='Calibri', size=10)
+    BOLD_FONT   = Font(name='Calibri', bold=True, size=10)
+
+    CENTER = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    LEFT   = Alignment(horizontal='left',   vertical='center', wrap_text=False)
+    RIGHT  = Alignment(horizontal='right',  vertical='center')
+
+    thin = Side(style='thin', color='CCCCCC')
+    BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    CURRENCY_FMT = '#,##0.00'
+    DATE_FMT     = 'YYYY-MM-DD'
+    DATETIME_FMT = 'YYYY-MM-DD HH:MM'
+
+    # ── Title block ─────────────────────────────────────────────────────────
+    num_cols = 24  # matches COLUMNS below
+    end_col = get_column_letter(num_cols)
+
+    ws.merge_cells(f'A1:{end_col}1')
+    title_cell = ws['A1']
+    title_cell.value     = 'Lifewood Expense AI — Receipts Export'
+    title_cell.font      = Font(name='Calibri', bold=True, size=14, color='FFFFFF')
+    title_cell.fill      = HEADER_FILL
+    title_cell.alignment = CENTER
+    ws.row_dimensions[1].height = 28
+
+    ws.merge_cells(f'A2:{end_col}2')
+    subtitle = ws['A2']
+    subtitle.value = (
+        f"Generated: {tz.now().strftime('%B %d, %Y %I:%M %p')}"
+        + (f"  |  Folder: {folder_filter}" if folder_filter else "  |  All folders")
+        + f"  |  {len(receipts)} records"
+    )
+    subtitle.font      = Font(name='Calibri', size=9, italic=True, color='333333')
+    subtitle.alignment = CENTER
+    ws.row_dimensions[2].height = 16
+
+    ws.row_dimensions[3].height = 4   # spacer
+
+    # ── Column definitions (exactly as requested) ──────────────────────────
+    # (header_label, model_field_or_callable, col_width, fmt_type)
+    COLUMNS = [
+        ('User',              '__user__',           18, 'text'),
+        ('File Name',         'drive_file_name',    30, 'text'),
+        ('Folder ID',         'drive_folder_id',    28, 'text'),
+        ('Folder Name',       'drive_folder_name',  26, 'text'),
+        ('Status',            'status',             12, 'text'),
+        ('OCR Processed At',  'ocr_processed_at',  20, 'datetime'),
+        ('Document Type',     'document_type',      18, 'text'),
+        ('VAT Type',          'vat_type',           14, 'text'),
+        ('Expense Category',  'expense_category',   20, 'text'),
+        ('Business Name',     'business_name',      28, 'text'),
+        ('Business Address',  'business_address',   32, 'text'),
+        ('TIN',               'tin',                16, 'text'),
+        ('Receipt Number',    'receipt_number',     18, 'text'),
+        ('BIR Permit No.',    'bir_permit_number',  18, 'text'),
+        ('Expense Date',      'expense_date',       14, 'date'),
+        ('Description',       'description',        34, 'text'),
+        ('Buyer Name',        'buyer_name',         22, 'text'),
+        ('Buyer TIN',         'buyer_tin',          16, 'text'),
+        ('Subtotal',          'subtotal',           16, 'currency'),
+        ('Vatable Sales',     'vatable_sales',      16, 'currency'),
+        ('VAT Exempt Sales',  'vat_exempt_sales',   18, 'currency'),
+        ('Zero Rated Sales',  'zero_rated_sales',   18, 'currency'),
+        ('VAT Amount',        'vat_amount',         16, 'currency'),
+        ('Total',             'total',              16, 'currency'),
+    ]
+
+    HEADER_ROW = 4
+
+    # Write header row
+    for col_idx, (label, _, width, _fmt) in enumerate(COLUMNS, start=1):
+        cell = ws.cell(row=HEADER_ROW, column=col_idx, value=label)
+        cell.font      = HEADER_FONT
+        cell.fill      = HEADER_FILL
+        cell.alignment = CENTER
+        cell.border    = BORDER
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    ws.row_dimensions[HEADER_ROW].height = 22
+
+    # ── Data rows ──────────────────────────────────────────────────────────
+    currency_col_indices = [
+        i + 1 for i, (_, _, _, fmt) in enumerate(COLUMNS) if fmt == 'currency'
+    ]
+
+    for row_idx, receipt in enumerate(receipts, start=HEADER_ROW + 1):
+        fill = ALT_FILL if row_idx % 2 == 0 else WHITE_FILL
+        for col_idx, (_, field, _, fmt) in enumerate(COLUMNS, start=1):
+
+            # Resolve value
+            if field == '__user__':
+                user_obj = receipt.user
+                value = user_obj.get_full_name() or user_obj.email or user_obj.username if user_obj else '(unassigned)'
+            else:
+                value = getattr(receipt, field, None)
+
+            # Type coerce
+            if fmt == 'currency':
+                value = float(value) if value is not None else 0.0
+            elif fmt == 'datetime':
+                if value and hasattr(value, 'replace'):
+                    value = value.replace(tzinfo=None)
+            elif fmt == 'date':
+                pass   # keep as date; openpyxl handles it
+            else:
+                value = str(value) if value is not None else ''
+
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.font   = BODY_FONT
+            cell.fill   = fill
+            cell.border = BORDER
+
+            if fmt == 'currency':
+                cell.number_format = CURRENCY_FMT
+                cell.alignment     = RIGHT
+            elif fmt in ('date', 'datetime'):
+                cell.number_format = DATE_FMT if fmt == 'date' else DATETIME_FMT
+                cell.alignment     = CENTER
+            else:
+                cell.alignment = LEFT
+
+        ws.row_dimensions[row_idx].height = 16
+
+    # ── Totals row ─────────────────────────────────────────────────────────
+    if receipts:
+        total_row = HEADER_ROW + len(receipts) + 1
+        ws.row_dimensions[total_row].height = 20
+
+        for col_idx in range(1, len(COLUMNS) + 1):
+            c = ws.cell(row=total_row, column=col_idx)
+            c.fill   = TOTAL_FILL
+            c.border = BORDER
+
+        ws.cell(row=total_row, column=1, value='TOTALS').font      = BOLD_FONT
+        ws.cell(row=total_row, column=1).alignment = CENTER
+
+        for col_idx in currency_col_indices:
+            start_r    = HEADER_ROW + 1
+            end_r      = HEADER_ROW + len(receipts)
+            col_letter = get_column_letter(col_idx)
+            c = ws.cell(row=total_row, column=col_idx,
+                        value=f'=SUM({col_letter}{start_r}:{col_letter}{end_r})')
+            c.font          = BOLD_FONT
+            c.number_format = CURRENCY_FMT
+            c.alignment     = RIGHT
+
+    # ── Freeze panes below header ──────────────────────────────────────────
+    ws.freeze_panes = f'A{HEADER_ROW + 1}'
+
+    # ── Build filename ─────────────────────────────────────────────────────
+    timestamp = tz.now().strftime('%Y%m%d_%H%M')
+    if folder_filter:
+        safe_name = folder_filter.replace(' ', '_').replace('/', '-')[:40]
+        filename  = f'lifewood_{safe_name}_{timestamp}.xlsx'
+    else:
+        filename = f'lifewood_receipts_{timestamp}.xlsx'
+
+    # ── Stream ─────────────────────────────────────────────────────────────
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+    return response
