@@ -31,7 +31,7 @@ from .models import Receipt, Conversation, ChatMessage
 
 
 # ─────────────────────────────────────────────
-# AUTH HELPER (reuse from views.py)
+# AUTH HELPER
 # ─────────────────────────────────────────────
 
 def require_auth(func):
@@ -75,21 +75,11 @@ def _to_float(v):
 @require_GET
 @require_auth
 def risk_analytics(request):
-    """
-    Comprehensive risk dashboard:
-    - BIR compliance risk score
-    - Missing-field breakdown
-    - Duplicate detection
-    - Anomalous amounts (statistical outliers)
-    - Concentration risk (over-reliance on single vendor/category)
-    - Over-budget alerts (if BudgetEntry records exist)
-    """
     start, end = _parse_range(request)
     qs = get_user_receipts(request.user).filter(status='processed')
     period_qs  = qs.filter(expense_date__range=[start, end])
     total      = period_qs.count()
 
-    # ── BIR Compliance risk ───────────────────────────────────────────────
     missing_tin        = period_qs.filter(Q(tin='')          | Q(tin__isnull=True)).count()
     missing_receipt_no = period_qs.filter(Q(receipt_number='') | Q(receipt_number__isnull=True)).count()
     missing_bir_permit = period_qs.filter(Q(bir_permit_number='') | Q(bir_permit_number__isnull=True)).count()
@@ -103,23 +93,22 @@ def risk_analytics(request):
     ).count()
 
     compliance_pct = round((compliant / total * 100), 2) if total > 0 else 100.0
-    risk_score     = round(100 - compliance_pct, 2)   # higher = riskier
+    risk_score     = round(100 - compliance_pct, 2)
 
-    # ── Vendor concentration risk ─────────────────────────────────────────
+    # Vendor concentration risk
     vendor_totals = list(
         period_qs.exclude(business_name='')
         .values('business_name')
-        .annotate(total=Sum('total'), count=Count('id'))
-        .order_by('-total')[:10]
+        .annotate(spend=Sum('total'), count=Count('id'))
+        .order_by('-spend')[:10]
     )
     grand_total = period_qs.aggregate(t=Sum('total'))['t'] or Decimal('1')
-    if vendor_totals:
-        top_vendor_pct = round(float(vendor_totals[0]['total'] / grand_total * 100), 2)
-    else:
-        top_vendor_pct = 0.0
+    top_vendor_pct = round(float(vendor_totals[0]['spend'] / grand_total * 100), 2) if vendor_totals else 0.0
 
-    # ── Amount anomaly detection (z-score based) ───────────────────────────
-    stats = period_qs.aggregate(avg=Avg('total'), std=StdDev('total'), mn=Min('total'), mx=Max('total'))
+    # Amount anomaly detection (z-score based)
+    stats = period_qs.aggregate(
+        avg=Avg('total'), std=StdDev('total'), mn=Min('total'), mx=Max('total')
+    )
     avg_amount = _to_float(stats['avg'])
     std_amount = _to_float(stats['std'])
     anomalous  = []
@@ -139,24 +128,24 @@ def risk_analytics(request):
                 'z_score':       round(z, 2),
             })
 
-    # ── Category concentration ────────────────────────────────────────────
+    # Category concentration
     category_dist = list(
         period_qs.values('drive_folder_name')
-        .annotate(total=Sum('total'), count=Count('id'))
-        .order_by('-total')
+        .annotate(spend=Sum('total'), count=Count('id'))
+        .order_by('-spend')
     )
     category_risk = []
     for c in category_dist:
-        pct = round(float(c['total'] / grand_total * 100), 2) if grand_total else 0
+        pct = round(float(c['spend'] / grand_total * 100), 2) if grand_total else 0
         category_risk.append({
             'folder':       c['drive_folder_name'] or 'Uncategorized',
-            'total':        str(c['total']),
+            'total':        str(c['spend']),
             'count':        c['count'],
             'pct_of_spend': pct,
             'risk_level':   'high' if pct > 40 else 'medium' if pct > 25 else 'low',
         })
 
-    # ── Try budget overrun detection ──────────────────────────────────────
+    # Budget overrun detection
     budget_alerts = []
     try:
         from .models import BudgetEntry
@@ -170,11 +159,11 @@ def risk_analytics(request):
             if actual > b['budgeted_amount']:
                 overrun = actual - b['budgeted_amount']
                 budget_alerts.append({
-                    'folder':          b['folder_name'],
-                    'budgeted':        str(b['budgeted_amount']),
-                    'actual':          str(actual),
-                    'overrun':         str(overrun),
-                    'overrun_pct':     round(float(overrun / b['budgeted_amount'] * 100), 2),
+                    'folder':      b['folder_name'],
+                    'budgeted':    str(b['budgeted_amount']),
+                    'actual':      str(actual),
+                    'overrun':     str(overrun),
+                    'overrun_pct': round(float(overrun / b['budgeted_amount'] * 100), 2),
                 })
     except Exception:
         pass
@@ -205,12 +194,12 @@ def risk_analytics(request):
         },
         'anomalous_transactions': anomalous,
         'vendor_concentration': {
-            'top_vendors':     [{**v, 'total': str(v['total'])} for v in vendor_totals],
-            'top_vendor_pct':  top_vendor_pct,
-            'risk_level':      'high' if top_vendor_pct > 50 else 'medium' if top_vendor_pct > 30 else 'low',
+            'top_vendors':    [{**v, 'total': str(v['spend'])} for v in vendor_totals],
+            'top_vendor_pct': top_vendor_pct,
+            'risk_level':     'high' if top_vendor_pct > 50 else 'medium' if top_vendor_pct > 30 else 'low',
         },
-        'category_risk':   category_risk,
-        'budget_alerts':   budget_alerts,
+        'category_risk':  category_risk,
+        'budget_alerts':  budget_alerts,
     })
 
 
@@ -221,20 +210,11 @@ def risk_analytics(request):
 @require_GET
 @require_auth
 def performance_analytics(request):
-    """
-    Operational performance metrics:
-    - Processing velocity (receipts per day/week)
-    - OCR accuracy proxy (receipts needing review vs processed)
-    - Spend efficiency trends (month-over-month)
-    - Category-level spend vs historical average
-    - Weekday spending patterns
-    - Processing time analysis
-    """
     today = timezone.now().date()
     start, end = _parse_range(request)
     qs = get_user_receipts(request.user).filter(status='processed')
 
-    # ── Receipt processing velocity ────────────────────────────────────────
+    # Receipt processing velocity
     duration_days = max((end - start).days, 1)
     period_count  = qs.filter(expense_date__range=[start, end]).count()
     receipts_per_day = round(period_count / duration_days, 2)
@@ -245,24 +225,29 @@ def performance_analytics(request):
         qs.filter(expense_date__gte=twelve_weeks_ago)
         .annotate(week=TruncWeek('expense_date'))
         .values('week')
-        .annotate(count=Count('id'), spend=Sum('total'))
+        # FIX: renamed total -> week_spend to avoid Django 6 alias conflict
+        .annotate(count=Count('id'), week_spend=Sum('total'))
         .order_by('week')
     )
 
-    # ── Spend efficiency: MoM change per folder ───────────────────────────
+    # Spend efficiency: MoM change per folder
     current_month_start = today.replace(day=1)
     prev_month_end      = current_month_start - timedelta(days=1)
     prev_month_start    = prev_month_end.replace(day=1)
 
     current_by_folder = {
-        r['drive_folder_name']: _to_float(r['total'])
+        r['drive_folder_name']: _to_float(r['folder_spend'])
         for r in qs.filter(expense_date__range=[current_month_start, today])
-        .values('drive_folder_name').annotate(total=Sum('total'))
+        .values('drive_folder_name')
+        # FIX: renamed total -> folder_spend
+        .annotate(folder_spend=Sum('total'))
     }
     prev_by_folder = {
-        r['drive_folder_name']: _to_float(r['total'])
+        r['drive_folder_name']: _to_float(r['folder_spend'])
         for r in qs.filter(expense_date__range=[prev_month_start, prev_month_end])
-        .values('drive_folder_name').annotate(total=Sum('total'))
+        .values('drive_folder_name')
+        # FIX: renamed total -> folder_spend
+        .annotate(folder_spend=Sum('total'))
     }
 
     all_folders = set(list(current_by_folder.keys()) + list(prev_by_folder.keys()))
@@ -272,26 +257,30 @@ def performance_analytics(request):
         prev = prev_by_folder.get(f, 0)
         change = round((curr - prev) / prev * 100, 2) if prev > 0 else None
         folder_performance.append({
-            'folder':           f or 'Uncategorized',
-            'current_month':    round(curr, 2),
-            'previous_month':   round(prev, 2),
-            'change_pct':       change,
-            'trend':            'up' if change and change > 5 else 'down' if change and change < -5 else 'stable',
+            'folder':         f or 'Uncategorized',
+            'current_month':  round(curr, 2),
+            'previous_month': round(prev, 2),
+            'change_pct':     change,
+            'trend':          'up' if change and change > 5 else 'down' if change and change < -5 else 'stable',
         })
 
-    # ── Weekday spending pattern ───────────────────────────────────────────
+    # Weekday spending pattern
     from django.db.models.functions import ExtractWeekDay
     weekday_names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     weekday_data  = list(
         qs.filter(expense_date__gte=today - timedelta(days=90))
         .annotate(wd=ExtractWeekDay('expense_date'))
         .values('wd')
-        .annotate(total=Sum('total'), count=Count('id'))
+        # FIX: renamed total -> day_spend
+        .annotate(day_spend=Sum('total'), count=Count('id'))
         .order_by('wd')
     )
-    weekday_spend = [{'day': weekday_names[r['wd'] - 1], 'total': str(r['total']), 'count': r['count']} for r in weekday_data]
+    weekday_spend = [
+        {'day': weekday_names[r['wd'] - 1], 'total': str(r['day_spend']), 'count': r['count']}
+        for r in weekday_data
+    ]
 
-    # ── OCR quality proxy ─────────────────────────────────────────────────
+    # OCR quality proxy
     all_receipts   = get_user_receipts(request.user)
     total_all      = all_receipts.count()
     needs_review   = all_receipts.filter(status='needs_review').count()
@@ -299,35 +288,45 @@ def performance_analytics(request):
     processed_ok   = all_receipts.filter(status='processed').count()
     ocr_success_rate = round(processed_ok / total_all * 100, 2) if total_all > 0 else 0
 
-    # ── Top month by spend ────────────────────────────────────────────────
+    # Top month by spend
     monthly_top = list(
         qs.annotate(month=TruncMonth('expense_date'))
-        .values('month').annotate(total=Sum('total'), count=Count('id'))
-        .order_by('-total')[:3]
+        .values('month')
+        # FIX: renamed total -> month_spend
+        .annotate(month_spend=Sum('total'), count=Count('id'))
+        .order_by('-month_spend')[:3]
     )
 
     return JsonResponse({
         'period': {'start': start.isoformat(), 'end': end.isoformat()},
         'processing_velocity': {
-            'receipts_in_period':  period_count,
-            'duration_days':       duration_days,
-            'receipts_per_day':    receipts_per_day,
-            'weekly_volume':       [
-                {'week': r['week'].strftime('%Y-%m-%d'), 'count': r['count'], 'total': str(r['spend'])}
+            'receipts_in_period': period_count,
+            'duration_days':      duration_days,
+            'receipts_per_day':   receipts_per_day,
+            'weekly_volume': [
+                {
+                    'week':  r['week'].strftime('%Y-%m-%d'),
+                    'count': r['count'],
+                    'total': str(r['week_spend']),
+                }
                 for r in weekly
             ],
         },
         'ocr_quality': {
-            'total':           total_all,
-            'processed':       processed_ok,
-            'needs_review':    needs_review,
-            'failed':          failed,
+            'total':            total_all,
+            'processed':        processed_ok,
+            'needs_review':     needs_review,
+            'failed':           failed,
             'success_rate_pct': ocr_success_rate,
         },
         'folder_mom_performance': folder_performance,
         'weekday_pattern':        weekday_spend,
-        'peak_months':            [
-            {'month': r['month'].strftime('%Y-%m'), 'total': str(r['total']), 'count': r['count']}
+        'peak_months': [
+            {
+                'month': r['month'].strftime('%Y-%m'),
+                'total': str(r['month_spend']),
+                'count': r['count'],
+            }
             for r in monthly_top
         ],
     })
@@ -340,14 +339,6 @@ def performance_analytics(request):
 @require_GET
 @require_auth
 def portfolio_analytics(request):
-    """
-    Portfolio view of Lifewood's expense categories / folders:
-    - Spend distribution (treemap data)
-    - Growth rates per category
-    - VAT portfolio analysis
-    - Document type mix
-    - Vendor diversity index
-    """
     start, end = _parse_range(request)
     qs = get_user_receipts(request.user).filter(status='processed')
     period_qs = qs.filter(expense_date__range=[start, end])
@@ -355,17 +346,18 @@ def portfolio_analytics(request):
     grand_total = period_qs.aggregate(t=Sum('total'))['t'] or Decimal('1')
     grand_vat   = period_qs.aggregate(v=Sum('vat_amount'))['v'] or Decimal('0')
 
-    # ── Folder portfolio ──────────────────────────────────────────────────
+    # Folder portfolio
+    # FIX: renamed total -> folder_total, avg -> folder_avg to avoid Django 6 conflicts
     folders = list(
         period_qs.values('drive_folder_name')
         .annotate(
-            total_spend=Sum('total'),
-            vat       =Sum('vat_amount'),
-            count     =Count('id'),
-            avg       =Avg('total'),
-            vendors   =Count('business_name', distinct=True),
+            folder_total =Sum('total'),
+            vat          =Sum('vat_amount'),
+            count        =Count('id'),
+            folder_avg   =Avg('total'),
+            vendors      =Count('business_name', distinct=True),
         )
-        .order_by('-total_spend')
+        .order_by('-folder_total')
     )
 
     # Previous period for growth calculation
@@ -373,50 +365,55 @@ def portfolio_analytics(request):
     prev_end     = start - timedelta(days=1)
     prev_start   = prev_end - timedelta(days=duration)
     prev_folder_totals = {
-        r['drive_folder_name']: _to_float(r['total'])
+        r['drive_folder_name']: _to_float(r['prev_spend'])
         for r in qs.filter(expense_date__range=[prev_start, prev_end])
-        .values('drive_folder_name').annotate(total=Sum('total'))
+        .values('drive_folder_name')
+        # FIX: renamed total -> prev_spend
+        .annotate(prev_spend=Sum('total'))
     }
 
     portfolio = []
     for f in folders:
         folder_name = f['drive_folder_name'] or 'Uncategorized'
-        pct = round(float(f['total_spend'] / grand_total * 100), 2)
+        pct         = round(float(f['folder_total'] / grand_total * 100), 2)
         prev_total  = prev_folder_totals.get(f['drive_folder_name'], 0)
-        growth      = round((float(f['total_spend']) - prev_total) / prev_total * 100, 2) if prev_total > 0 else None
-        vat_rate    = round(float(f['vat']) / float(f['total_spend']) * 100, 2) if float(f['total_spend']) > 0 else 0
+        growth      = round((float(f['folder_total']) - prev_total) / prev_total * 100, 2) if prev_total > 0 else None
+        vat_rate    = round(float(f['vat']) / float(f['folder_total']) * 100, 2) if float(f['folder_total']) > 0 else 0
         portfolio.append({
-            'folder':          folder_name,
-            'total': str(f['total_spend']),
-            'vat':             str(f['vat']),
-            'count':           f['count'],
-            'avg_transaction': str(round(_to_float(f['avg']), 2)),
-            'unique_vendors':  f['vendors'],
+            'folder':           folder_name,
+            'total':            str(f['folder_total']),
+            'vat':              str(f['vat']),
+            'count':            f['count'],
+            'avg_transaction':  str(round(_to_float(f['folder_avg']), 2)),
+            'unique_vendors':   f['vendors'],
             'pct_of_portfolio': pct,
-            'growth_pct':      growth,
-            'vat_rate_pct':    vat_rate,
+            'growth_pct':       growth,
+            'vat_rate_pct':     vat_rate,
         })
 
-    # ── VAT portfolio ─────────────────────────────────────────────────────
+    # VAT portfolio
     vat_by_type = list(
         period_qs.values('vat_type')
-        .annotate(total=Sum('total'), vat=Sum('vat_amount'), count=Count('id'))
-        .order_by('-total')
+        .annotate(vat_total=Sum('total'), vat=Sum('vat_amount'), count=Count('id'))
+        .order_by('-vat_total')
     )
 
-    # ── Document type mix ─────────────────────────────────────────────────
+    # Document type mix
     doc_mix = list(
         period_qs.values('document_type')
-        .annotate(count=Count('id'), total=Sum('total'))
+        .annotate(count=Count('id'), doc_total=Sum('total'))
         .order_by('-count')
     )
 
-    # ── Vendor diversity (Herfindahl-Hirschman Index) ─────────────────────
+    # Vendor diversity (Herfindahl-Hirschman Index)
     vendor_shares = list(
         period_qs.exclude(business_name='')
-        .values('business_name').annotate(total=Sum('total'))
+        .values('business_name').annotate(v_spend=Sum('total'))
     )
-    hhi = sum((float(v['total']) / float(grand_total) * 100) ** 2 for v in vendor_shares) if vendor_shares else 0
+    hhi = sum(
+        (float(v['v_spend']) / float(grand_total) * 100) ** 2
+        for v in vendor_shares
+    ) if vendor_shares else 0
     diversity = 'high' if hhi < 1500 else 'medium' if hhi < 2500 else 'low'
 
     return JsonResponse({
@@ -432,10 +429,12 @@ def portfolio_analytics(request):
         },
         'folder_portfolio': portfolio,
         'vat_breakdown': [
-            {**v, 'total': str(v['total']), 'vat': str(v['vat'])} for v in vat_by_type
+            {**v, 'total': str(v['vat_total']), 'vat': str(v['vat'])}
+            for v in vat_by_type
         ],
         'document_type_mix': [
-            {**d, 'total': str(d['total'])} for d in doc_mix
+            {**d, 'total': str(d['doc_total'])}
+            for d in doc_mix
         ],
     })
 
@@ -447,19 +446,10 @@ def portfolio_analytics(request):
 @require_GET
 @require_auth
 def cashflow_analytics(request):
-    """
-    Cash flow and liquidity monitoring:
-    - Monthly cash outflow trend (12 months)
-    - Rolling 30/60/90 day outflow
-    - Burn rate analysis
-    - Projected next-month spend (linear extrapolation)
-    - Largest single-day outlays
-    - VAT obligation schedule
-    """
     today = timezone.now().date()
     qs    = get_user_receipts(request.user).filter(status='processed')
 
-    # ── 12-month monthly cash outflow ─────────────────────────────────────
+    # 12-month monthly cash outflow
     twelve_months_ago = (today.replace(day=1) - timedelta(days=365))
     monthly = list(
         qs.filter(expense_date__gte=twelve_months_ago)
@@ -471,15 +461,15 @@ def cashflow_analytics(request):
 
     monthly_series = [
         {
-            'month':    r['month'].strftime('%Y-%m'),
-            'outflow':  _to_float(r['outflow']),
-            'vat':      _to_float(r['vat']),
-            'count':    r['count'],
+            'month':   r['month'].strftime('%Y-%m'),
+            'outflow': _to_float(r['outflow']),
+            'vat':     _to_float(r['vat']),
+            'count':   r['count'],
         }
         for r in monthly
     ]
 
-    # ── Rolling window totals ─────────────────────────────────────────────
+    # Rolling window totals
     def rolling(days):
         return _to_float(
             qs.filter(expense_date__gte=today - timedelta(days=days))
@@ -491,18 +481,17 @@ def cashflow_analytics(request):
     roll_90  = rolling(90)
     roll_180 = rolling(180)
 
-    # ── Daily burn rate ───────────────────────────────────────────────────
     burn_rate_30d  = round(roll_30  / 30,  2)
     burn_rate_90d  = round(roll_90  / 90,  2)
     burn_rate_180d = round(roll_180 / 180, 2)
 
-    # ── Next-month projection (simple linear regression on last 6 months) ─
+    # Next-month projection (simple linear regression on last 6 months)
     recent_months = monthly_series[-6:] if len(monthly_series) >= 6 else monthly_series
     projection    = None
     if len(recent_months) >= 3:
-        vals = [m['outflow'] for m in recent_months]
-        n    = len(vals)
-        xs   = list(range(n))
+        vals   = [m['outflow'] for m in recent_months]
+        n      = len(vals)
+        xs     = list(range(n))
         x_mean = sum(xs) / n
         y_mean = sum(vals) / n
         denom  = sum((x - x_mean) ** 2 for x in xs)
@@ -511,16 +500,15 @@ def cashflow_analytics(request):
             intercept = y_mean - slope * x_mean
             projection = round(intercept + slope * n, 2)
 
-    # ── Largest single-day outlays ─────────────────────────────────────────
-    from django.db.models.functions import TruncDate
+    # Largest single-day outlays
     daily_top = list(
         qs.filter(expense_date__gte=today - timedelta(days=90))
         .values('expense_date')
-        .annotate(total=Sum('total'), count=Count('id'))
-        .order_by('-total')[:10]
+        .annotate(day_total=Sum('total'), count=Count('id'))
+        .order_by('-day_total')[:10]
     )
 
-    # ── VAT obligation schedule (monthly) ─────────────────────────────────
+    # VAT obligation schedule (monthly)
     vat_schedule = [
         {
             'month':            m['month'],
@@ -530,14 +518,18 @@ def cashflow_analytics(request):
         for m in monthly_series[-12:]
     ]
 
-    # ── Current month status ───────────────────────────────────────────────
+    # Current month status
     current_month_start = today.replace(day=1)
     current_outflow     = _to_float(
         qs.filter(expense_date__range=[current_month_start, today])
         .aggregate(t=Sum('total'))['t'] or 0
     )
     days_elapsed = (today - current_month_start).days + 1
-    days_in_month = (current_month_start.replace(month=current_month_start.month % 12 + 1, day=1) if current_month_start.month < 12 else current_month_start.replace(year=current_month_start.year + 1, month=1, day=1)) - current_month_start
+    days_in_month = (
+        current_month_start.replace(month=current_month_start.month % 12 + 1, day=1)
+        if current_month_start.month < 12
+        else current_month_start.replace(year=current_month_start.year + 1, month=1, day=1)
+    ) - current_month_start
     month_projected = round(current_outflow / days_elapsed * days_in_month.days, 2) if days_elapsed > 0 else 0
 
     return JsonResponse({
@@ -552,15 +544,19 @@ def cashflow_analytics(request):
             '90d_daily':  burn_rate_90d,
             '180d_daily': burn_rate_180d,
         },
-        'monthly_trend':    monthly_series,
+        'monthly_trend':   monthly_series,
         'current_month': {
-            'outflow_to_date':   round(current_outflow, 2),
-            'days_elapsed':      days_elapsed,
+            'outflow_to_date':      round(current_outflow, 2),
+            'days_elapsed':         days_elapsed,
             'projected_full_month': month_projected,
         },
         'next_month_projection': projection,
-        'top_spending_days':     [
-            {'date': r['expense_date'].isoformat(), 'total': str(r['total']), 'count': r['count']}
+        'top_spending_days': [
+            {
+                'date':  r['expense_date'].isoformat(),
+                'total': str(r['day_total']),
+                'count': r['count'],
+            }
             for r in daily_top
         ],
         'vat_obligation_schedule': vat_schedule,
@@ -574,21 +570,11 @@ def cashflow_analytics(request):
 @require_GET
 @require_auth
 def compliance_analytics(request):
-    """
-    Philippine BIR compliance reporting:
-    - Per-receipt compliance status
-    - Monthly compliance trend
-    - VAT type distribution
-    - Receipts requiring immediate attention
-    - BIR field completion rates
-    - Compliance score history
-    """
     start, end = _parse_range(request)
     qs         = get_user_receipts(request.user).filter(status='processed')
     period_qs  = qs.filter(expense_date__range=[start, end])
     total      = period_qs.count()
 
-    # ── BIR mandatory fields check ────────────────────────────────────────
     MANDATORY_FIELDS = {
         'tin':              Q(tin='') | Q(tin__isnull=True),
         'receipt_number':   Q(receipt_number='') | Q(receipt_number__isnull=True),
@@ -608,7 +594,6 @@ def compliance_analytics(request):
             'rate_pct': round(present / total * 100, 2) if total > 0 else 0,
         }
 
-    # ── Overall compliance score ───────────────────────────────────────────
     fully_compliant = period_qs.exclude(
         Q(tin='') | Q(tin__isnull=True) |
         Q(receipt_number='') | Q(receipt_number__isnull=True) |
@@ -618,14 +603,14 @@ def compliance_analytics(request):
 
     compliance_score = round(fully_compliant / total * 100, 2) if total > 0 else 100.0
 
-    # ── Monthly compliance trend ───────────────────────────────────────────
+    # Monthly compliance trend
     twelve_months_ago = timezone.now().date().replace(day=1) - timedelta(days=365)
     monthly_compliance = []
     monthly_qs = list(
         qs.filter(expense_date__gte=twelve_months_ago)
         .annotate(month=TruncMonth('expense_date'))
         .values('month')
-        .annotate(total=Count('id'))
+        .annotate(total_count=Count('id'))
         .order_by('month')
     )
     for m in monthly_qs:
@@ -637,22 +622,22 @@ def compliance_analytics(request):
             Q(receipt_number='') | Q(receipt_number__isnull=True) |
             Q(bir_permit_number='') | Q(bir_permit_number__isnull=True)
         ).count()
-        m_total = m['total']
+        m_total = m['total_count']
         monthly_compliance.append({
-            'month':           m['month'].strftime('%Y-%m'),
-            'total':           m_total,
-            'compliant':       m_compliant,
-            'compliance_pct':  round(m_compliant / m_total * 100, 2) if m_total > 0 else 100.0,
+            'month':          m['month'].strftime('%Y-%m'),
+            'total':          m_total,
+            'compliant':      m_compliant,
+            'compliance_pct': round(m_compliant / m_total * 100, 2) if m_total > 0 else 100.0,
         })
 
-    # ── VAT compliance breakdown ───────────────────────────────────────────
+    # VAT compliance breakdown
     vat_breakdown = list(
         period_qs.values('vat_type')
-        .annotate(count=Count('id'), total=Sum('total'), vat=Sum('vat_amount'))
+        .annotate(count=Count('id'), vat_total=Sum('total'), vat=Sum('vat_amount'))
         .order_by('-count')
     )
 
-    # ── Receipts needing immediate attention ──────────────────────────────
+    # Receipts needing immediate attention
     critical = list(
         period_qs.filter(
             Q(tin='') | Q(tin__isnull=True) |
@@ -663,71 +648,72 @@ def compliance_analytics(request):
         .order_by('-total')[:20]
     )
 
-    # ── Total VAT remittable ───────────────────────────────────────────────
     vat_remittable = period_qs.filter(vat_type='vat').aggregate(v=Sum('vat_amount'))['v'] or 0
 
     return JsonResponse({
-        'period':          {'start': start.isoformat(), 'end': end.isoformat()},
+        'period':           {'start': start.isoformat(), 'end': end.isoformat()},
         'compliance_score': compliance_score,
         'summary': {
-            'total':            total,
-            'fully_compliant':  fully_compliant,
-            'non_compliant':    total - fully_compliant,
-            'vat_remittable':   str(vat_remittable),
+            'total':           total,
+            'fully_compliant': fully_compliant,
+            'non_compliant':   total - fully_compliant,
+            'vat_remittable':  str(vat_remittable),
         },
-        'field_completion':     field_completion,
-        'monthly_trend':        monthly_compliance,
-        'vat_breakdown':        [
-            {**v, 'total': str(v['total']), 'vat': str(v['vat'])} for v in vat_breakdown
+        'field_completion':  field_completion,
+        'monthly_trend':     monthly_compliance,
+        'vat_breakdown': [
+            {**v, 'total': str(v['vat_total']), 'vat': str(v['vat'])}
+            for v in vat_breakdown
         ],
-        'critical_receipts':    [
-            {**r,
-             'total':        str(r['total']),
-             'expense_date': r['expense_date'].isoformat() if r['expense_date'] else None,
-             'missing':      [
-                 f for f, v in [
-                     ('TIN', r['tin']), ('Receipt No.', r['receipt_number']),
-                     ('BIR Permit', r['bir_permit_number']),
-                 ] if not v
-             ]}
+        'critical_receipts': [
+            {
+                **r,
+                'total':        str(r['total']),
+                'expense_date': r['expense_date'].isoformat() if r['expense_date'] else None,
+                'missing': [
+                    f for f, v in [
+                        ('TIN', r['tin']),
+                        ('Receipt No.', r['receipt_number']),
+                        ('BIR Permit', r['bir_permit_number']),
+                    ] if not v
+                ],
+            }
             for r in critical
         ],
     })
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. EXECUTIVE SUMMARY  (single endpoint for the top-level dashboard)
+# 6. EXECUTIVE SUMMARY
 # ─────────────────────────────────────────────────────────────────────────────
 
 @require_GET
 @require_auth
 def executive_summary(request):
-    """
-    Single aggregated endpoint for the executive dashboard.
-    Returns KPI cards + sparklines + alert counts in one round trip.
-    """
-    today      = timezone.now().date()
+    today       = timezone.now().date()
     month_start = today.replace(day=1)
     qs          = get_user_receipts(request.user).filter(status='processed')
 
-    # This month
-    curr = qs.filter(expense_date__range=[month_start, today])
+    curr     = qs.filter(expense_date__range=[month_start, today])
+
+    # FIX: renamed total -> total_spend to avoid Django 6 conflict with Avg('total')
     curr_agg = curr.aggregate(
-        total_spend=Sum('total'), vat=Sum('vat_amount'),
-        count=Count('id'), avg=Avg('total')
+        total_spend=Sum('total'),
+        vat=Sum('vat_amount'),
+        count=Count('id'),
+        avg=Avg('total'),
     )
 
-    # Previous month
     prev_end   = month_start - timedelta(days=1)
     prev_start = prev_end.replace(day=1)
     prev_agg   = qs.filter(expense_date__range=[prev_start, prev_end]).aggregate(
-        total=Sum('total'))
+        t=Sum('total')
+    )
 
-    curr_total = _to_float(curr_agg['total_spend'])
-    prev_total = _to_float(prev_agg['total'])
+    curr_total = _to_float(curr_agg['total_spend'])   # FIX: use total_spend key
+    prev_total = _to_float(prev_agg['t'])
     mom_change = round((curr_total - prev_total) / prev_total * 100, 2) if prev_total > 0 else 0
 
-    # Compliance score
     total_count = curr.count()
     compliant   = curr.exclude(
         Q(tin='') | Q(tin__isnull=True) |
@@ -736,7 +722,6 @@ def executive_summary(request):
     ).count()
     compliance_score = round(compliant / total_count * 100, 2) if total_count > 0 else 100.0
 
-    # Risk alerts
     missing_critical = curr.filter(
         Q(tin='') | Q(tin__isnull=True)
     ).count()
@@ -746,16 +731,16 @@ def executive_summary(request):
     sparkline = list(
         qs.filter(expense_date__gte=six_months_ago)
         .annotate(m=TruncMonth('expense_date'))
-        .values('m').annotate(total=Sum('total'))
+        .values('m')
+        .annotate(spark_total=Sum('total'))
         .order_by('m')
     )
 
-    # Top folder this month
     top_folder = (
         curr.exclude(drive_folder_name='')
         .values('drive_folder_name')
-        .annotate(total=Sum('total'))
-        .order_by('-total')
+        .annotate(f_total=Sum('total'))
+        .order_by('-f_total')
         .first()
     )
 
@@ -763,67 +748,67 @@ def executive_summary(request):
         'as_of': today.isoformat(),
         'kpi_cards': [
             {
-                'id':      'total_spend',
-                'label':   'Total Spend (MTD)',
-                'value':   round(curr_total, 2),
-                'format':  'currency',
-                'change':  mom_change,
-                'trend':   'up' if mom_change > 0 else 'down',
-                'alert':   mom_change > 20,
+                'id':     'total_spend',
+                'label':  'Total Spend (MTD)',
+                'value':  round(curr_total, 2),
+                'format': 'currency',
+                'change': mom_change,
+                'trend':  'up' if mom_change > 0 else 'down',
+                'alert':  mom_change > 20,
             },
             {
-                'id':      'vat_paid',
-                'label':   'VAT Paid (MTD)',
-                'value':   round(_to_float(curr_agg['vat']), 2),
-                'format':  'currency',
-                'change':  None,
-                'trend':   'neutral',
-                'alert':   False,
+                'id':     'vat_paid',
+                'label':  'VAT Paid (MTD)',
+                'value':  round(_to_float(curr_agg['vat']), 2),
+                'format': 'currency',
+                'change': None,
+                'trend':  'neutral',
+                'alert':  False,
             },
             {
-                'id':      'transactions',
-                'label':   'Transactions (MTD)',
-                'value':   curr_agg['count'] or 0,
-                'format':  'integer',
-                'change':  None,
-                'trend':   'neutral',
-                'alert':   False,
+                'id':     'transactions',
+                'label':  'Transactions (MTD)',
+                'value':  curr_agg['count'] or 0,
+                'format': 'integer',
+                'change': None,
+                'trend':  'neutral',
+                'alert':  False,
             },
             {
-                'id':      'compliance_score',
-                'label':   'BIR Compliance Score',
-                'value':   compliance_score,
-                'format':  'percentage',
-                'change':  None,
-                'trend':   'up' if compliance_score >= 90 else 'down',
-                'alert':   compliance_score < 80,
+                'id':     'compliance_score',
+                'label':  'BIR Compliance Score',
+                'value':  compliance_score,
+                'format': 'percentage',
+                'change': None,
+                'trend':  'up' if compliance_score >= 90 else 'down',
+                'alert':  compliance_score < 80,
             },
             {
-                'id':      'risk_alerts',
-                'label':   'Open Risk Alerts',
-                'value':   missing_critical,
-                'format':  'integer',
-                'change':  None,
-                'trend':   'neutral',
-                'alert':   missing_critical > 0,
+                'id':     'risk_alerts',
+                'label':  'Open Risk Alerts',
+                'value':  missing_critical,
+                'format': 'integer',
+                'change': None,
+                'trend':  'neutral',
+                'alert':  missing_critical > 0,
             },
             {
-                'id':      'avg_transaction',
-                'label':   'Avg. Transaction',
-                'value':   round(_to_float(curr_agg['avg']), 2),
-                'format':  'currency',
-                'change':  None,
-                'trend':   'neutral',
-                'alert':   False,
+                'id':     'avg_transaction',
+                'label':  'Avg. Transaction',
+                'value':  round(_to_float(curr_agg['avg']), 2),
+                'format': 'currency',
+                'change': None,
+                'trend':  'neutral',
+                'alert':  False,
             },
         ],
         'spend_sparkline': [
-            {'month': r['m'].strftime('%Y-%m'), 'total': _to_float(r['total'])}
+            {'month': r['m'].strftime('%Y-%m'), 'total': _to_float(r['spark_total'])}
             for r in sparkline
         ],
         'top_folder_this_month': {
             'name':  top_folder['drive_folder_name'] if top_folder else None,
-            'total': str(top_folder['total']) if top_folder else '0',
+            'total': str(top_folder['f_total']) if top_folder else '0',
         },
         'prev_month_total': round(prev_total, 2),
     })
