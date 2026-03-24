@@ -1,7 +1,26 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://expense-ai-backend-eip2.onrender.com';
+const normalizeBaseUrl = (url = '') => url.trim().replace(/\/+$/, '');
+const isLocalHost = (hostname = '') => hostname === 'localhost' || hostname === '127.0.0.1';
+
+export const API_ENDPOINTS = {
+  local: process.env.NEXT_PUBLIC_LOCAL_API_URL || 'http://localhost:8000',
+  remote: process.env.NEXT_PUBLIC_REMOTE_API_URL || 'https://expense-ai-backend-eip2.onrender.com',
+};
+
+export function getApiBaseUrl() {
+  const explicit = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
+  if (explicit) return explicit;
+
+  if (typeof window !== 'undefined') {
+    return normalizeBaseUrl(
+      isLocalHost(window.location.hostname) ? API_ENDPOINTS.local : API_ENDPOINTS.remote
+    );
+  }
+
+  return normalizeBaseUrl(process.env.NODE_ENV === 'development' ? API_ENDPOINTS.local : API_ENDPOINTS.remote);
+}
 
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
