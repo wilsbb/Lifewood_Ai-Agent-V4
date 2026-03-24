@@ -294,6 +294,7 @@ def performance_analytics(request):
         .values('month')
         # FIX: renamed total -> month_spend
         .annotate(month_spend=Sum('total'), count=Count('id'))
+        .exclude(month=None)
         .order_by('-month_spend')[:3]
     )
 
@@ -323,7 +324,7 @@ def performance_analytics(request):
         'weekday_pattern':        weekday_spend,
         'peak_months': [
             {
-                'month': r['month'].strftime('%Y-%m'),
+                'month': r['month'].strftime('%Y-%m') if r['month'] else None,
                 'total': str(r['month_spend']),
                 'count': r['count'],
             }
