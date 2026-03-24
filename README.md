@@ -59,7 +59,19 @@ The Next.js app runs by default at `http://localhost:3000`.
 
 ## Running both locally
 
-Start the backend first (`8000`) then the frontend (`3000`). Configure the frontend to point to the backend API (env variable in `expense-ai-frontend` — e.g. `NEXT_PUBLIC_API_URL`).
+Start the backend first (`8000`) then the frontend (`3000`).
+
+The frontend supports both local and remote API endpoints via `expense-ai-frontend/.env.example`:
+
+- `NEXT_PUBLIC_API_URL`: explicit override (highest priority)
+- `NEXT_PUBLIC_LOCAL_API_URL`: local backend endpoint (default `http://localhost:8000`)
+- `NEXT_PUBLIC_REMOTE_API_URL`: deployed backend endpoint fallback
+
+Behavior:
+
+- If `NEXT_PUBLIC_API_URL` is set, the app always uses it.
+- If not set and the app is running on `localhost`/`127.0.0.1`, it uses `NEXT_PUBLIC_LOCAL_API_URL`.
+- Otherwise, it uses `NEXT_PUBLIC_REMOTE_API_URL`.
 
 ## Production build
 
@@ -91,3 +103,4 @@ Add a license file to the repo (e.g., `LICENSE`) or indicate the project license
 ---
 
 If you want, I can: commit this file, add a `requirements.txt`/`package.json` checks, or expand sections with env examples. Which would you like next?
+

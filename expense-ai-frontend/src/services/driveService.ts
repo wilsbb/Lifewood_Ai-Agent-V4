@@ -1,16 +1,18 @@
 // src/services/driveService.ts
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBaseUrl } from '../lib/api';
+
+const apiUrl = (path: string) => `${getApiBaseUrl()}${path}`;
 
 export const driveService = {
   // 1. Get the Auth URL from Django
   getAuthUrl: async () => {
     // We point directly to the Django endpoint we created
-    return `${API_URL}/api/google/auth/`;
+    return apiUrl('/api/google/auth/');
   },
 
   // 2. Fetch the list of files from Django
   listFiles: async () => {
-    const response = await fetch(`${API_URL}/api/google/files/`, {
+    const response = await fetch(apiUrl('/api/google/files/'), {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -21,13 +23,13 @@ export const driveService = {
     return response.json();
   },
 
-  getFileContentUrl: (fileId: string) => `${API_URL}/api/google/files/${fileId}/content/`,
+  getFileContentUrl: (fileId: string) => apiUrl(`/api/google/files/${fileId}/content/`),
 
   uploadFileToFolder: async (folderId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_URL}/api/google/folders/${folderId}/upload/`, {
+    const response = await fetch(apiUrl(`/api/google/folders/${folderId}/upload/`), {
       method: 'POST',
       body: formData,
       credentials: 'include',
@@ -66,7 +68,7 @@ export const driveService = {
   },
 
   deleteFile: async (fileId: string) => {
-    const response = await fetch(`${API_URL}/api/google/files/${fileId}/delete/`, {
+    const response = await fetch(apiUrl(`/api/google/files/${fileId}/delete/`), {
       method: 'POST',
       credentials: 'include',
     });

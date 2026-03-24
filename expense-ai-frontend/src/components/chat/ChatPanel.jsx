@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Bot } from 'lucide-react';
-import { fetchHistory } from '../../lib/api';
+import { fetchHistory, getApiBaseUrl } from '../../lib/api';
 import ChatMessage from './ChatMessage';
 import ChatInput   from './ChatInput';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://expense-ai-backend-eip2.onrender.com';
 const LOGO_URL  = 'https://framerusercontent.com/images/BZSiFYgRc4wDUAuEybhJbZsIBQY.png?width=1519&height=429';
 
 const fabStyle = (open) => ({
@@ -343,7 +342,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
         formData.append('message', msg || 'Please process this receipt.');
         if (convId) formData.append('conversation_id', String(convId));
 
-        const res = await fetch(`${BASE_URL}/api/billing/chat/upload-receipt/`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/billing/chat/upload-receipt/`, {
           method: 'POST',
           credentials: 'include',
           body: formData,
@@ -358,7 +357,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
       } else {
         // ── Normal text message ──────────────────────────────────────────
         const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
-        const res = await fetch(`${BASE_URL}/api/billing/chat/message/`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/billing/chat/message/`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

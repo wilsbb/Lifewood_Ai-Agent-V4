@@ -1,8 +1,6 @@
 'use client';
 
-import { formatPeso } from '../../lib/api';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://expense-ai-backend-eip2.onrender.com';
+import { formatPeso, getApiBaseUrl } from '../../lib/api';
 
 function renderContent(text) {
   if (!text) return null;
@@ -113,7 +111,7 @@ function Avatar({ role }) {
 function DownloadButton({ downloadUrl, receiptCount, folderFilter }) {
   // downloadUrl from backend is the full backend URL already
   // Make sure it's absolute
-  const href = downloadUrl.startsWith('http') ? downloadUrl : `${BASE_URL}${downloadUrl}`;
+  const href = downloadUrl.startsWith('http') ? downloadUrl : `${getApiBaseUrl()}${downloadUrl}`;
 
   return (
     <a
