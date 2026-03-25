@@ -81,7 +81,7 @@ def google_drive_auth(request):
     )
     # Save state AND code_verifier (required by google-auth-oauthlib >= 1.0)
     request.session['google_oauth_state'] = state
-    if flow.code_verifier:
+    if hasattr(flow, 'code_verifier'):
         request.session['google_oauth_code_verifier'] = flow.code_verifier
     request.session.save()
     return redirect(authorization_url)
