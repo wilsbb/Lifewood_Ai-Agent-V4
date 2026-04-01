@@ -448,8 +448,13 @@ export default function ChatInput({
             ref={textareaRef}
             value={displayValue}
             onChange={e => {
-              // Only update committed value, not interim
-              setValue(e.target.value.replace(interimText, '').trimEnd());
+              // When voice is active, strip the interim text suffix
+              // When typing normally, use value as-is (trimEnd breaks spacebar)
+              if (interimText) {
+                setValue(e.target.value.replace(interimText, '').trimEnd());
+              } else {
+                setValue(e.target.value);
+              }
             }}
             onKeyDown={handleKeyDown}
             onFocus={() => setFocused(true)}
