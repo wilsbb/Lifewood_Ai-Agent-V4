@@ -140,6 +140,17 @@ def oauth2callback(request):
     # Restore code_verifier saved during google_drive_auth so PKCE validation passes
     code_verifier = request.session.get('google_oauth_code_verifier')
 
+    if not code_verifier:
+        print(
+            'OAuth callback missing PKCE code_verifier. '
+            f'session_key={request.session.session_key} '
+            f'has_state={bool(request.session.get("google_oauth_state"))} '
+            f'cookie_present={settings.SESSION_COOKIE_NAME in request.COOKIES}'
+        )
+        return redirect(
+            f'{FRONTEND_URL}?error=auth_failed&reason=Missing%20OAuth%20session.%20Please%20try%20again.'
+        )
+
     flow = Flow.from_client_secrets_file(
         _get_client_secrets_file(),
         scopes=SCOPES,
@@ -148,14 +159,15 @@ def oauth2callback(request):
     )
 
     # Re-attach the code_verifier so google-auth-oauthlib can complete the exchange
-    if code_verifier:
-        flow.code_verifier = code_verifier
+    flow.code_verifier = code_verifier
 
     try:
         auth_response = request.build_absolute_uri()
         if not settings.DEBUG and auth_response.startswith('http://'):
             auth_response = 'https://' + auth_response[len('http://'):]
         flow.fetch_token(authorization_response=auth_response)
+        request.session.pop('google_oauth_code_verifier', None)
+        request.session.pop('google_oauth_state', None)
     except Exception as e:
         print(f"Token fetch failed: {e}")
         return redirect(f'{FRONTEND_URL}?error=auth_failed&reason={str(e)}')
