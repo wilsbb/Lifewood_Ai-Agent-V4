@@ -1,0 +1,249 @@
+{
+  "name": "Lifewood — AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "53f6dd30-0a6c-48c5-9f15-b408efaf06e9",
+      "name": "Every 5 Minutes1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1744,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://lifewoodai-agent-v4-production.up.railway.app/api/google/files/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Secret",
+              "value": "mHxsTSEhfiqbsY9fp-ELHJsKGWYoplzAPgIQvbUmHPl2fLWurZwO2b9yCEsTt4hEGJ8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "6fcb2a9e-edb4-476b-ae6c-ca5aae532568",
+      "name": "Get Drive Files1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1984,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://lifewoodai-agent-v4-production.up.railway.app/api/billing/receipts/processed-ids/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Secret",
+              "value": "=mHxsTSEhfiqbsY9fp-ELHJsKGWYoplzAPgIQvbUmHPl2fLWurZwO2b9yCEsTt4hEGJ8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "d9095954-0c87-4d60-8da8-65bfbec4ed69",
+      "name": "Get Processed IDs1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2224,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const driveItems = $('Get Drive Files1').all();\nconst processedData = $('Get Processed IDs1').first().json;\nconst processedIds = new Set(processedData.processed_file_ids || []);\n\nconst IMAGE_TYPES = [\n  'image/jpeg', 'image/jpg', 'image/png', 'image/gif',\n  'image/webp', 'image/tiff', 'application/pdf'\n];\n\nfunction flatten(items, folderName = '', folderId = '') {\n  const result = [];\n  for (const item of items) {\n    if (item.mimeType === 'application/vnd.google-apps.folder') {\n      result.push(...flatten(item.children || [], item.name, item.id));\n    } else if (IMAGE_TYPES.includes(item.mimeType)) {\n      result.push({\n        file_id: item.id,\n        file_name: item.name,\n        mime_type: item.mimeType,\n        folder_id: folderId,\n        folder_name: folderName,\n        modified_time: item.modifiedTime,\n      });\n    }\n  }\n  return result;\n}\n\nconst allFiles = [];\nfor (const driveItem of driveItems) {\n  const folders = Array.isArray(driveItem.json) ? driveItem.json : [driveItem.json];\n  allFiles.push(...flatten(folders));\n}\n\nconst newFiles = allFiles.filter(f => !processedIds.has(f.file_id));\n\nif (newFiles.length === 0) {\n  console.log('No new files to process.');\n  return [];\n}\n\nconsole.log(`Found ${newFiles.length} new file(s) to process.`);\nreturn newFiles.map(f => ({ json: f }));"
+      },
+      "id": "49842da8-65f5-4bc3-b5b8-b4e3cd3ef3bb",
+      "name": "Find New Image Files1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "14dcdcdd-60d7-4d4e-8df4-92fcce88c15b",
+      "name": "Loop Over Files1",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2704,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const saved = $input.first().json;\nconsole.log(`Receipt saved: ID=${saved.receipt_id}, created=${saved.created}, file=${saved.drive_file_id}`);\nreturn $input.all();"
+      },
+      "id": "a1c41500-34ba-43ed-acaa-730e7bc57eb0",
+      "name": "Log Result1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3184,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lifewoodai-agent-v4-production.up.railway.app/api/billing/receipts/process-ocr/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Secret",
+              "value": "mHxsTSEhfiqbsY9fp-ELHJsKGWYoplzAPgIQvbUmHPl2fLWurZwO2b9yCEsTt4hEGJ8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={        \"file_id\": \"{{ $json.file_id }}\",        \"file_name\": \"{{ $json.file_name }}\",        \"folder_id\": \"{{ $json.folder_id }}\",        \"folder_name\": \"{{ $json.folder_name }}\"      }",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2992,
+        192
+      ],
+      "id": "0f5230fc-ba81-474d-8533-9265fcf009bc",
+      "name": "HTTP Request1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 5 Minutes1": {
+      "main": [
+        [
+          {
+            "node": "Get Drive Files1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Drive Files1": {
+      "main": [
+        [
+          {
+            "node": "Get Processed IDs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Processed IDs1": {
+      "main": [
+        [
+          {
+            "node": "Find New Image Files1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find New Image Files1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Files1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Result1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Log Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6926f218-81d8-4689-bf21-283e70e6524e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "62719930d056caa9e51789002856a9ba5a98cd3532a5fc03ffe34dbad05c7ab8"
+  },
+  "id": "sKNq2akhxVkWse14",
+  "tags": []
+}
