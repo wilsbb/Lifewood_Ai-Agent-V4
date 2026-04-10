@@ -6,11 +6,8 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-<<<<<<< HEAD
 import ChatPanel from '../chat/ChatPanel';
-=======
 import { getApiBaseUrl } from '../../lib/api';
->>>>>>> 7da70e1e3f52a6c210f347c5af051f0457f1e315
 
 const BASE_URL = getApiBaseUrl();
 const LOGO_URL = 'https://framerusercontent.com/images/BZSiFYgRc4wDUAuEybhJbZsIBQY.png?width=1519&height=429';
