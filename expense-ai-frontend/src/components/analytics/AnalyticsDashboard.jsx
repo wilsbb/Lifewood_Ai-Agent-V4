@@ -482,7 +482,7 @@ export default function AnalyticsDashboard() {
             fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700,
             textDecoration: 'none',
           }}>
-            ← Expense Dashboard
+            ← Finance Dashboard
           </a>
           <button onClick={load} disabled={loading} style={{
             padding: '7px 16px', borderRadius: 10,
@@ -770,7 +770,7 @@ export default function AnalyticsDashboard() {
         {/* ══════════════════════════════════════════ PORTFOLIO ══ */}
         {activeTab === 'Portfolio' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <SectionHeader title="Portfolio Analytics" subtitle="Expense folder portfolio distribution, VAT breakdown, vendor diversity, and growth analysis" icon="📁" />
+            <SectionHeader title="Portfolio Analytics" subtitle="Finance folder portfolio distribution, VAT breakdown, vendor diversity, and growth analysis" icon="📁" />
 
             {/* Summary cards */}
             {!loading && portfolio?.portfolio_summary && (

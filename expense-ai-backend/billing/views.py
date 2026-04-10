@@ -196,7 +196,7 @@ def _call_openrouter(messages):
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
             'HTTP-Referer': os.environ.get('FRONTEND_URL', 'https://lifewood.ai'),
-            'X-Title': 'Lifewood Expense AI',
+            'X-Title': 'Lifewood Finance AI',
         },
         json={
             'model': 'openai/gpt-4o',
@@ -1341,7 +1341,7 @@ Rules:
         print(f'Intent parse error: {e}')
         reply = ("I had trouble identifying which folder to use. "
                  "Please try again and mention the folder name clearly, e.g. "
-                 "\"This receipt is for the Admin Expense folder.\"")
+                 "\"This receipt is for the Admin Finance folder.\"")
         agent_msg = ChatMessage.objects.create(
             conversation=conversation, role='agent', content=reply)
         conversation.save()
@@ -1365,7 +1365,7 @@ Rules:
         reply = (
             "I couldn't determine which folder to use from your message. "
             "Please mention the folder name clearly, e.g. "
-            "'This receipt is for the Admin Expense folder.' "
+            "'This receipt is for the Admin Finance folder.' "
             f"Your existing folders: {available}"
         )
         agent_msg = ChatMessage.objects.create(
@@ -1600,7 +1600,7 @@ Respond ONLY with a JSON object, no markdown, no explanation:
 }}
 
 Rules:
-- Match case-insensitively and allow partial matches (e.g. "admin" matches "Admin Expense")
+- Match case-insensitively and allow partial matches (e.g. "admin" matches "Admin Finance")
 - Set matched_existing to true only if the folder name is in the available list
 - Set should_create to true if the user says "create", "make", "there's no folder", "no folder yet", or similar
 - If no folder is mentioned and confidence would be low, still return your best guess with confidence "low"
@@ -1656,7 +1656,7 @@ Rules:
             f"I need to know which folder to put this receipt in.\n\n"
             f"**Available folders:**\n{folder_list_text}\n\n"
             f"You can say something like:\n"
-            f'  • *"This is for the Admin Expense folder"*\n'
+            f'  • *"This is for the Admin Finance folder"*\n'
             f'  • *"Put it in Condo Dues"*\n'
             f'  • *"Create a new folder called VIP Preparation and upload it there"*'
         )
@@ -1794,7 +1794,7 @@ def export_receipts_excel(request):
 
     ws.merge_cells(f'A1:{end_col}1')
     title_cell = ws['A1']
-    title_cell.value     = 'Lifewood Expense AI — Receipts Export'
+    title_cell.value     = 'Lifewood Finance AI — Receipts Export'
     title_cell.font      = Font(name='Calibri', bold=True, size=14, color='FFFFFF')
     title_cell.fill      = HEADER_FILL
     title_cell.alignment = CENTER
