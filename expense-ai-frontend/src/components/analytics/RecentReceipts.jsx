@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CATEGORY_LABELS, formatPeso } from '../../lib/api';
 
 const cardStyle = {
@@ -57,33 +57,45 @@ const COLS = [
   { key: 'total',            label: 'Amount' },
 ];
 
+const PAGE_SIZE = 10;
+
 export default function RecentReceipts({ receipts, loading }) {
   const [sortKey, setSortKey]   = useState('expense_date');
   const [sortDir, setSortDir]   = useState('desc');
   const [search,  setSearch]    = useState('');
+  const [page, setPage]         = useState(1);
 
   const handleSort = (key) => {
     if (key === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('desc'); }
   };
 
-  const filtered = (receipts || [])
-    .filter((r) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        (r.business_name || '').toLowerCase().includes(q) ||
-        (r.expense_category || '').toLowerCase().includes(q) ||
-        (r.description || '').toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => {
-      let va = a[sortKey], vb = b[sortKey];
-      if (sortKey === 'total') { va = parseFloat(va); vb = parseFloat(vb); }
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
+  const filtered = useMemo(() => (
+    (receipts || [])
+      .filter((r) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+          (r.business_name || '').toLowerCase().includes(q) ||
+          (r.expense_category || '').toLowerCase().includes(q) ||
+          (r.description || '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        let va = a[sortKey], vb = b[sortKey];
+        if (sortKey === 'total') { va = parseFloat(va); vb = parseFloat(vb); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      })
+  ), [receipts, search, sortDir, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginatedReceipts = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filtered.length, search, sortDir, sortKey]);
 
   return (
     <div style={cardStyle}>
@@ -146,7 +158,7 @@ export default function RecentReceipts({ receipts, loading }) {
                     {search ? 'No matching receipts' : 'No receipts yet'}
                   </td>
                 </tr>
-              ) : filtered.map((r, i) => (
+              ) : paginatedReceipts.map((r, i) => (
                 <tr
                   key={r.id || i}
                   style={{ borderBottom: '1px solid var(--lw-border)' }}
@@ -179,6 +191,57 @@ export default function RecentReceipts({ receipts, loading }) {
               ))}
             </tbody>
           </table>
+          {filtered.length > PAGE_SIZE && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              marginTop: '14px',
+              fontFamily: "'Manrope', sans-serif",
+              flexWrap: 'wrap',
+            }}>
+              <div style={{ fontSize: '11px', color: 'var(--lw-muted)' }}>
+                Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  style={{
+                    background: 'var(--lw-surface-alt)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    color: 'var(--lw-text)',
+                    fontSize: '11px',
+                    cursor: page === 1 ? 'not-allowed' : 'pointer',
+                    opacity: page === 1 ? 0.5 : 1,
+                  }}
+                  type="button"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  style={{
+                    background: 'var(--lw-surface-alt)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    color: 'var(--lw-text)',
+                    fontSize: '11px',
+                    cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                    opacity: page === totalPages ? 0.5 : 1,
+                  }}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
