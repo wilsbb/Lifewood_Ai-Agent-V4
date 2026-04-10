@@ -1,5 +1,6 @@
 import './globals.css';
 import { Manrope } from 'next/font/google';
+import SharedChatbot from '../components/chat/SharedChatbot';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -20,6 +21,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={manrope.className}>
         {children}
+        <SharedChatbot />
       </body>
     </html>
   );

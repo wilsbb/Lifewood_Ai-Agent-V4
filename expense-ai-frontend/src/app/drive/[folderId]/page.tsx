@@ -2,7 +2,6 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import ChatPanel from '../../../components/chat/ChatPanel';
 import { driveService } from '../../../services/driveService';
 import styles from '../page.module.css';
 
@@ -110,7 +109,6 @@ export default function FolderWorkspacePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<DriveItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [convId, setConvId] = useState<number | null>(null);
 
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
 
@@ -463,10 +461,6 @@ export default function FolderWorkspacePage() {
         ) : null}
       </main>
 
-      <ChatPanel
-        conversationId={convId}
-        onConversationCreate={setConvId}
-      />
     </>
   );
 }

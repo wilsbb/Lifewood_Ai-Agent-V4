@@ -6,7 +6,6 @@ import CategoryChart     from '../../components/analytics/CategoryChart';
 import TrendsChart       from '../../components/analytics/TrendsChart';
 import RecentReceipts    from '../../components/analytics/RecentReceipts';
 import ComplianceAlerts  from '../../components/analytics/ComplianceAlerts';
-import ChatPanel         from '../../components/chat/ChatPanel';
 import {
   fetchSummary, fetchCategories, fetchTrends, fetchReceipts,
 } from '../../lib/api';
@@ -61,7 +60,6 @@ export default function DashboardClient() {
   const [error,      setError]      = useState(null);
   // FIX: period is now used as a dependency for data loading
   const [period,     setPeriod]     = useState('month');
-  const [convId,     setConvId]     = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
 
   // FIX: load() now accepts the period and passes it to the API calls
@@ -246,12 +244,6 @@ export default function DashboardClient() {
           </section>
         </main>
       </div>
-
-      <ChatPanel
-        conversationId={convId}
-        onConversationCreate={setConvId}
-      />
-
       <style>{`
         :root {
           --lw-paper: #f5eedb;
@@ -269,9 +261,6 @@ export default function DashboardClient() {
           --lw-surface-alt: rgba(255,255,255,0.7);
           --lw-shadow-soft: 0 18px 40px rgba(19,48,32,0.12);
           --glass-bg: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.62) 100%);
-          --glass-bg-strong: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.82) 100%);
-          --glass-border: rgba(255,255,255,0.65);
-          --glass-shadow: 0 18px 45px rgba(19,48,32,0.16);
           --glass-highlight: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 60%);
           --lw-navbar-padding: 0 32px;
           --lw-navbar-height: 64px;
@@ -280,12 +269,6 @@ export default function DashboardClient() {
           --lw-center-left: 50%;
           --lw-center-transform: translateX(-50%);
           --lw-card-min: 340px;
-          --lw-chat-width: 380px;
-          --lw-chat-height: 580px;
-          --lw-chat-right: 28px;
-          --lw-chat-bottom: 96px;
-          --lw-fab-right: 28px;
-          --lw-fab-bottom: 28px;
         }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--lw-paper); }
@@ -350,12 +333,6 @@ export default function DashboardClient() {
             --lw-navbar-height: 72px;
             --lw-content-padding: 20px 16px 96px;
             --lw-card-min: 280px;
-            --lw-chat-width: 320px;
-            --lw-chat-height: 520px;
-            --lw-chat-right: 16px;
-            --lw-chat-bottom: 84px;
-            --lw-fab-right: 16px;
-            --lw-fab-bottom: 16px;
           }
           .lw-navbar { flex-wrap: wrap; gap: 10px; align-items: flex-start; }
           .lw-navbar-left { width: 100%; justify-content: center; }
@@ -397,8 +374,6 @@ export default function DashboardClient() {
         @media (max-width: 600px) {
           :root {
             --lw-card-min: 240px;
-            --lw-chat-width: calc(100vw - 32px);
-            --lw-chat-height: 70vh;
           }
         }
       `}</style>
