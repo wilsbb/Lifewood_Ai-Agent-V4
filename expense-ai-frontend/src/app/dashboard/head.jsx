@@ -1,7 +1,7 @@
 export default function Head() {
   return (
     <>
-      <title>Lifewood - Expense Dashboard</title>
+      <title>Lifewood - Finance Dashboard</title>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link

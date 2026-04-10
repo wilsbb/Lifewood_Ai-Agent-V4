@@ -196,7 +196,7 @@ def _call_openrouter(messages):
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
             'HTTP-Referer': os.environ.get('FRONTEND_URL', 'https://lifewood.ai'),
-            'X-Title': 'Lifewood Expense AI',
+            'X-Title': 'Lifewood Finance AI',
         },
         json={
             'model': 'openai/gpt-4o',
@@ -1280,7 +1280,7 @@ Rules:
         print(f'Intent parse error: {e}')
         reply = ("I had trouble identifying which folder to use. "
                  "Please try again and mention the folder name clearly, e.g. "
-                 "\"This receipt is for the Admin Expense folder.\"")
+                 "\"This receipt is for the Admin Finance folder.\"")
         agent_msg = ChatMessage.objects.create(
             conversation=conversation, role='agent', content=reply)
         conversation.save()
@@ -1304,7 +1304,7 @@ Rules:
         reply = (
             "I couldn't determine which folder to use from your message. "
             "Please mention the folder name clearly, e.g. "
-            "'This receipt is for the Admin Expense folder.' "
+            "'This receipt is for the Admin Finance folder.' "
             f"Your existing folders: {available}"
         )
         agent_msg = ChatMessage.objects.create(
@@ -1465,6 +1465,198 @@ Rules:
 
 
 # ─────────────────────────────────────────────
+# CHAT RECEIPT UPLOAD
+# ─────────────────────────────────────────────
+
+@csrf_exempt
+@require_auth
+def upload_receipt_via_chat(request):
+    """
+    Accepts a receipt image + a natural language message via multipart form.
+    - Parses which Drive folder the user wants using GPT
+    - Creates the folder if it doesn't exist and user requests it
+    - Uploads the file to Google Drive
+    - Runs OCR and saves the receipt to the DB
+    - Returns a conversational reply saved to chat history
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    uploaded_file = request.FILES.get('file')
+    message = request.POST.get('message', '').strip()
+    conversation_id = request.POST.get('conversation_id') or None
+
+    if not uploaded_file:
+        return JsonResponse({'error': 'No file provided'}, status=400)
+
+    if not message:
+        message = 'Please upload this receipt'
+
+    # ── Get or create conversation ─────────────────────────────────────────
+    if conversation_id:
+        try:
+            conversation = Conversation.objects.get(id=conversation_id, user=request.user)
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+    else:
+        conversation = Conversation.objects.create(
+            user=request.user,
+            title=f'Receipt upload: {uploaded_file.name[:50]}',
+        )
+
+    # Save user message (with filename noted)
+    ChatMessage.objects.create(
+        conversation=conversation,
+        role='user',
+        content=f'{message} [Attached: {uploaded_file.name}]',
+    )
+
+    # ── Get available Drive folders ────────────────────────────────────────
+    try:
+        drive_folders = _get_drive_folders()  # [{id, name, parents}]
+        folder_names = [f['name'] for f in drive_folders]
+        folder_map = {f['name'].lower(): f for f in drive_folders}
+    except Exception as e:
+        print(f'Drive folder fetch error: {e}')
+        drive_folders = []
+        folder_names = []
+        folder_map = {}
+
+    # ── Use AI to parse folder intent ─────────────────────────────────────
+    parse_prompt = f"""A user wants to upload a receipt to a specific Google Drive folder. Parse their message and determine the target folder.
+
+User message: "{message}"
+
+Available folders:
+{json.dumps(folder_names, indent=2)}
+
+Respond ONLY with a JSON object, no markdown, no explanation:
+{{
+  "target_folder_name": "the exact folder name from the list, or the new folder name the user wants to create",
+  "matched_existing": true or false,
+  "should_create": true or false,
+  "confidence": "high|medium|low"
+}}
+
+Rules:
+- Match case-insensitively and allow partial matches (e.g. "admin" matches "Admin Finance")
+- Set matched_existing to true only if the folder name is in the available list
+- Set should_create to true if the user says "create", "make", "there's no folder", "no folder yet", or similar
+- If no folder is mentioned and confidence would be low, still return your best guess with confidence "low"
+"""
+
+    try:
+        intent_reply, _ = _call_openrouter([{'role': 'user', 'content': parse_prompt}])
+        intent = json.loads(intent_reply.replace('```json', '').replace('```', '').strip())
+    except Exception as e:
+        print(f'Intent parse error: {e}')
+        intent = {'target_folder_name': None, 'matched_existing': False,
+                  'should_create': False, 'confidence': 'low'}
+
+    target_name = intent.get('target_folder_name', '')
+    matched = intent.get('matched_existing', False)
+    should_create = intent.get('should_create', False)
+    confidence = intent.get('confidence', 'low')
+
+    # ── Resolve folder ID ──────────────────────────────────────────────────
+    folder_id = None
+    resolved_folder_name = target_name
+    action_log = ''
+
+    if matched and target_name:
+        # Find by case-insensitive match
+        match = folder_map.get(target_name.lower())
+        if not match:
+            # Fuzzy fallback
+            for key, val in folder_map.items():
+                if target_name.lower() in key or key in target_name.lower():
+                    match = val
+                    break
+        if match:
+            folder_id = match['id']
+            resolved_folder_name = match['name']
+            action_log = f'uploaded to existing folder "{resolved_folder_name}"'
+
+    if not folder_id and (should_create or not matched) and target_name:
+        if should_create or confidence in ('high', 'medium'):
+            try:
+                folder_id, resolved_folder_name = _create_drive_folder(target_name)
+                action_log = f'created new folder "{resolved_folder_name}" and uploaded receipt there'
+            except Exception as e:
+                reply = f"I couldn't create the folder \"{target_name}\": {str(e)}"
+                ChatMessage.objects.create(conversation=conversation, role='agent', content=reply)
+                conversation.save()
+                return JsonResponse({'conversation_id': conversation.id, 'reply': reply, 'uploaded': False})
+
+    # ── No folder resolved — ask for clarification ─────────────────────────
+    if not folder_id:
+        folder_list_text = '\n'.join(f'  • {n}' for n in folder_names[:25]) or '  (no folders found)'
+        reply = (
+            f"I need to know which folder to put this receipt in.\n\n"
+            f"**Available folders:**\n{folder_list_text}\n\n"
+            f"You can say something like:\n"
+            f'  • *"This is for the Admin Finance folder"*\n'
+            f'  • *"Put it in Condo Dues"*\n'
+            f'  • *"Create a new folder called VIP Preparation and upload it there"*'
+        )
+        ChatMessage.objects.create(conversation=conversation, role='agent', content=reply)
+        conversation.save()
+        return JsonResponse({'conversation_id': conversation.id, 'reply': reply, 'uploaded': False})
+
+    # ── Upload to Drive ────────────────────────────────────────────────────
+    try:
+        file_id, file_name = _upload_file_to_drive_folder(
+            folder_id, uploaded_file, uploaded_file.name,
+            uploaded_file.content_type or 'image/jpeg',
+        )
+    except Exception as e:
+        reply = f"I found the folder \"{resolved_folder_name}\" but couldn't upload the file: {str(e)}"
+        ChatMessage.objects.create(conversation=conversation, role='agent', content=reply)
+        conversation.save()
+        return JsonResponse({'conversation_id': conversation.id, 'reply': reply, 'uploaded': False})
+
+    # ── Run OCR ────────────────────────────────────────────────────────────
+    ocr_note = ''
+    receipt_summary = ''
+    try:
+        receipt = _run_ocr_and_save(file_id, file_name, folder_id, resolved_folder_name)
+        total = f'PHP {receipt.total:,.2f}' if receipt.total else 'amount not detected'
+        merchant = receipt.business_name or 'merchant not detected'
+        date = receipt.expense_date or 'date not detected'
+        ocr_note = f'\n\n**OCR Result:**\n  • Merchant: {merchant}\n  • Amount: {total}\n  • Date: {date}'
+    except Exception as e:
+        print(f'OCR error for {file_id}: {e}')
+        ocr_note = '\n\n*OCR processing will be picked up by the background workflow shortly.*'
+
+    reply = (
+        f"Receipt uploaded successfully!\n\n"
+        f"**File:** {file_name}\n"
+        f"**Folder:** {resolved_folder_name}"
+        f"{ocr_note}"
+    )
+
+    ChatMessage.objects.create(
+        conversation=conversation,
+        role='agent',
+        content=reply,
+        metadata={
+            'uploaded_file_id': file_id,
+            'folder_id': folder_id,
+            'folder_name': resolved_folder_name,
+        },
+    )
+    conversation.save()
+
+    return JsonResponse({
+        'conversation_id': conversation.id,
+        'reply': reply,
+        'uploaded': True,
+        'file_id': file_id,
+        'folder_name': resolved_folder_name,
+    })
+
+
+# ─────────────────────────────────────────────
 # EXCEL EXPORT ENDPOINT
 # ─────────────────────────────────────────────
 
@@ -1541,7 +1733,7 @@ def export_receipts_excel(request):
 
     ws.merge_cells(f'A1:{end_col}1')
     title_cell = ws['A1']
-    title_cell.value     = 'Lifewood Expense AI — Receipts Export'
+    title_cell.value     = 'Lifewood Finance AI — Receipts Export'
     title_cell.font      = Font(name='Calibri', bold=True, size=14, color='FFFFFF')
     title_cell.fill      = HEADER_FILL
     title_cell.alignment = CENTER

@@ -1,5 +1,7 @@
 import './globals.css';
 import { Manrope } from 'next/font/google';
+import SecretAnalyticsShortcut from '../components/SecretAnalyticsShortcut';
+import SharedChatbot from '../components/chat/SharedChatbot';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -7,8 +9,8 @@ const manrope = Manrope({
 });
 
 export const metadata = {
-  title: 'Lifewood Expense AI',
-  description: 'Manage scanned Google Drive expense workspaces with Lifewood branding',
+  title: 'Lifewood Finance AI',
+  description: 'Manage scanned Google Drive finance workspaces with Lifewood branding',
 };
 
 export default function RootLayout({
@@ -20,6 +22,8 @@ export default function RootLayout({
     <html lang="en">
       <body className={manrope.className}>
         {children}
+        <SecretAnalyticsShortcut />
+        <SharedChatbot />
       </body>
     </html>
   );

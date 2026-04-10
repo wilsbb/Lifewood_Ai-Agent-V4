@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
 import { getComplianceIssues, formatPeso } from '../../lib/api';
 
 const cardStyle = {
@@ -8,6 +11,8 @@ const cardStyle = {
   boxShadow: 'var(--glass-shadow)',
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
+  alignSelf: 'start',
+  height: 'fit-content',
 };
 
 const titleStyle = {
@@ -26,15 +31,24 @@ const SEVERITY = {
   low:    { border: '#046241', bg: 'rgba(4,98,65,0.12)', label: 'Low' },
 };
 
+const PAGE_SIZE = 6;
+
 export default function ComplianceAlerts({ receipts, loading }) {
+  const [page, setPage] = useState(1);
+  const issues = useMemo(() => getComplianceIssues(receipts || []), [receipts]);
+  const totalPages = Math.max(1, Math.ceil(issues.length / PAGE_SIZE));
+  const paginatedIssues = issues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [issues.length]);
+
   if (loading) return (
     <div style={cardStyle}>
       <div style={titleStyle}>BIR Compliance Alerts</div>
       <div style={{ height: '120px', background: 'var(--lw-sea-salt)', borderRadius: '10px', animation: 'pulse 1.5s infinite' }} />
     </div>
   );
-
-  const issues = getComplianceIssues(receipts || []);
 
   return (
     <div style={cardStyle}>
@@ -84,7 +98,7 @@ export default function ComplianceAlerts({ receipts, loading }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {issues.slice(0, 5).map((issue, i) => {
+          {paginatedIssues.map((issue, i) => {
             const s = SEVERITY[issue.severity];
             return (
               <div key={i} style={{
@@ -137,9 +151,55 @@ export default function ComplianceAlerts({ receipts, loading }) {
               </div>
             );
           })}
-          {issues.length > 5 && (
-            <div style={{ textAlign: 'center', fontFamily: "'Manrope', sans-serif", fontSize: '11px', color: 'var(--lw-muted)', paddingTop: '4px' }}>
-              +{issues.length - 5} more issues - ask the AI agent to review all
+          {issues.length > PAGE_SIZE && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              paddingTop: '8px',
+              fontFamily: "'Manrope', sans-serif",
+              flexWrap: 'wrap',
+            }}>
+              <div style={{ fontSize: '11px', color: 'var(--lw-muted)' }}>
+                Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, issues.length)} of {issues.length}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  style={{
+                    background: 'var(--lw-surface-alt)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    color: 'var(--lw-text)',
+                    fontSize: '11px',
+                    cursor: page === 1 ? 'not-allowed' : 'pointer',
+                    opacity: page === 1 ? 0.5 : 1,
+                  }}
+                  type="button"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  style={{
+                    background: 'var(--lw-surface-alt)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    color: 'var(--lw-text)',
+                    fontSize: '11px',
+                    cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                    opacity: page === totalPages ? 0.5 : 1,
+                  }}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
