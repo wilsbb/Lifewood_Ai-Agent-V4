@@ -11,6 +11,8 @@ const cardStyle = {
   boxShadow: 'var(--glass-shadow)',
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
+  alignSelf: 'start',
+  height: 'fit-content',
 };
 
 const titleStyle = {

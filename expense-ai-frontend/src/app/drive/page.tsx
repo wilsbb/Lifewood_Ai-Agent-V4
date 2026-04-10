@@ -3,6 +3,7 @@
 import { ArrowRight, CheckCircle2, ChevronRight, Clock3, File, Folder, FolderOpen, Grid3X3, LayoutDashboard, LayoutList, Loader2, LogOut, Search, Sparkles, WifiOff } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ChatPanel from '../../components/chat/ChatPanel';
 import { driveService } from '../../services/driveService';
 import styles from './page.module.css';
 
@@ -132,6 +133,7 @@ export default function DrivePage() {
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
   const [userType, setUserType] = useState<'new' | 'returning'>('new');
+  const [convId, setConvId] = useState<number | null>(null);
 
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
 
@@ -226,8 +228,9 @@ export default function DrivePage() {
   }
 
   return (
-    <main className={styles.pageShell}>
-      <header className={styles.topbar}>
+    <>
+      <main className={styles.pageShell}>
+        <header className={styles.topbar}>
         {/* ── Brand ── */}
         <a className={styles.brand} href="/drive">
           <img alt="Lifewood" className={styles.brandLogo} src={LOGO_URL} />
@@ -451,7 +454,13 @@ export default function DrivePage() {
           )}
         </section>
       )}
-      </div>
-    </main>
+        </div>
+      </main>
+
+      <ChatPanel
+        conversationId={convId}
+        onConversationCreate={setConvId}
+      />
+    </>
   );
 }

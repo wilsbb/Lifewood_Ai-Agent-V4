@@ -11,6 +11,8 @@ const cardStyle = {
   boxShadow: 'var(--glass-shadow)',
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
+  alignSelf: 'start',
+  height: 'fit-content',
 };
 
 const titleStyle = {
@@ -29,7 +31,7 @@ const SEVERITY = {
   low:    { border: '#046241', bg: 'rgba(4,98,65,0.12)', label: 'Low' },
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 6;
 
 export default function ComplianceAlerts({ receipts, loading }) {
   const [page, setPage] = useState(1);
