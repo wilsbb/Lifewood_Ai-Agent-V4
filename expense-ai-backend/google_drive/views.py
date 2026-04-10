@@ -4,6 +4,7 @@ import base64
 import json as json_module
 import tempfile
 import uuid
+import re
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
 from django.conf import settings
@@ -33,6 +34,7 @@ SCOPES = [
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')
 N8N_AGENT_SECRET = os.environ.get('N8N_AGENT_SECRET', '')
+MATCH_CRITERIA = ['Finance', 'Lifewood']
 
 OAUTH_REDIRECT_URI = os.environ.get(
     'OAUTH_REDIRECT_URI',
@@ -67,6 +69,22 @@ def _get_client_secrets_file():
         tmp.close()
         return tmp.name
     return settings.GOOGLE_CLIENT_SECRETS
+
+
+def _tokenize_folder_name(folder_name):
+    return set(re.findall(r'[A-Za-z0-9]+', (folder_name or '').casefold()))
+
+
+def _matches_folder_criteria(folder_name, keywords=None):
+    required_keywords = {
+        keyword.casefold()
+        for keyword in (keywords or MATCH_CRITERIA)
+        if keyword and keyword.strip()
+    }
+    if not required_keywords:
+        return True
+    folder_tokens = _tokenize_folder_name(folder_name)
+    return required_keywords.issubset(folder_tokens)
 
 
 def google_drive_auth(request):
@@ -237,17 +255,21 @@ def list_drive_files(request):
             return items
 
         folders_result = service.files().list(
-            q="mimeType='application/vnd.google-apps.folder' and name contains 'lifewood' and trashed=false",
+            q="mimeType='application/vnd.google-apps.folder' and trashed=false",
             fields="files(id, name, mimeType, webViewLink)",
-            pageSize=50,
+            pageSize=200,
             orderBy="name",
         ).execute()
 
-        lifewood_folders = folders_result.get('files', [])
-        for folder in lifewood_folders:
+        matching_folders = [
+            folder
+            for folder in folders_result.get('files', [])
+            if _matches_folder_criteria(folder.get('name'))
+        ]
+        for folder in matching_folders:
             folder['children'] = get_children(folder['id'])
 
-        return JsonResponse(lifewood_folders, safe=False)
+        return JsonResponse(matching_folders, safe=False)
 
     except Exception as e:
         import traceback
