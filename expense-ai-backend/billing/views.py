@@ -951,27 +951,27 @@ def _create_drive_folder(folder_name, parent_id=None):
 
 def _upload_file_to_drive_folder(folder_id, file_obj, filename, mime_type):
     """Uploads a Django InMemoryUploadedFile to a Drive folder. Returns (file_id, file_name)."""
-    import tempfile as tmpmod
+    from io import BytesIO
     creds = _get_n8n_credentials()
     if not creds:
         raise Exception('No Google Drive credentials available')
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.http import MediaIoBaseUpload
     service = build('drive', 'v3', credentials=creds)
 
-    suffix = os.path.splitext(filename)[1] or '.jpg'
-    with tmpmod.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        for chunk in file_obj.chunks():
-            tmp.write(chunk)
-        tmp_path = tmp.name
+    buffer = BytesIO()
+    for chunk in file_obj.chunks():
+        buffer.write(chunk)
+    buffer.seek(0)
 
-    try:
-        file_metadata = {'name': filename, 'parents': [folder_id]}
-        media = MediaFileUpload(tmp_path, mimetype=mime_type or 'application/octet-stream', resumable=False)
-        uploaded = service.files().create(body=file_metadata, media_body=media, fields='id,name').execute()
-        return uploaded['id'], uploaded['name']
-    finally:
-        os.unlink(tmp_path)
+    file_metadata = {'name': filename, 'parents': [folder_id]}
+    media = MediaIoBaseUpload(
+        buffer,
+        mimetype=mime_type or 'application/octet-stream',
+        resumable=False,
+    )
+    uploaded = service.files().create(body=file_metadata, media_body=media, fields='id,name').execute()
+    return uploaded['id'], uploaded['name']
 
 
 # ─────────────────────────────────────────────
@@ -1167,24 +1167,20 @@ def _create_drive_folder(creds, name, parent_id=None):
 
 def _upload_file_to_folder(creds, folder_id, file_content, file_name, mime_type):
     """Upload file bytes to a specific Drive folder."""
-    import tempfile
+    from io import BytesIO
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.http import MediaIoBaseUpload
 
     service = build('drive', 'v3', credentials=creds)
-    suffix = os.path.splitext(file_name)[1] or '.jpg'
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(file_content)
-        tmp_path = tmp.name
-    try:
-        metadata = {'name': file_name, 'parents': [folder_id]}
-        media = MediaFileUpload(tmp_path, mimetype=mime_type, resumable=False)
-        return service.files().create(
-            body=metadata, media_body=media, fields='id,name,webViewLink'
-        ).execute()
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    metadata = {'name': file_name, 'parents': [folder_id]}
+    media = MediaIoBaseUpload(
+        BytesIO(file_content),
+        mimetype=mime_type or 'application/octet-stream',
+        resumable=False,
+    )
+    return service.files().create(
+        body=metadata, media_body=media, fields='id,name,webViewLink'
+    ).execute()
 
 
 def _run_ocr_on_image(base64_image, mime_type, api_key):
