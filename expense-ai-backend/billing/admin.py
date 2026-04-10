@@ -1,14 +1,46 @@
 from django.contrib import admin
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+
 from .models import (
-    Receipt, Conversation, ChatMessage, 
+    Receipt, Conversation, ChatMessage,
     BudgetEntry, KPISnapshot, RiskFlag, ComplianceRecord
 )
 
+class ReceiptResource(resources.ModelResource):
+
+    class Meta:
+        model = Receipt
+        # Only export these specific fields
+        fields = (
+            'id',
+            'drive_file_name',
+            'drive_folder_name',
+            'business_name',
+            'document_type',
+            'vat_type',
+            'expense_category',
+            'tin',
+            'receipt_number',
+            'bir_permit_number',
+            'expense_date',
+            'description',
+            'subtotal',
+            'vat_amount',
+            'total',
+            'status',
+        )
+        export_order = fields  # preserve the order above
+
 @admin.register(Receipt)
-class ReceiptAdmin(admin.ModelAdmin):
-    list_display = ('drive_file_name', 'business_name', 'document_type',
-                    'expense_category', 'total', 'expense_date', 'status')
-    list_filter = ('status', 'document_type', 'expense_category', 'vat_type')
+class ReceiptAdmin(ImportExportModelAdmin):
+    resource_class = ReceiptResource
+
+    list_display = (
+        'drive_file_name', 'business_name', 'document_type',
+        'expense_category', 'total', 'expense_date', 'status'
+    )
+    list_filter  = ('status', 'document_type', 'expense_category', 'vat_type')
     search_fields = ('business_name', 'tin', 'receipt_number', 'drive_file_name')
     readonly_fields = ('created_at', 'updated_at', 'ocr_processed_at')
 
