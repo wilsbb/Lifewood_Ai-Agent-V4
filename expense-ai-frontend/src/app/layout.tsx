@@ -7,8 +7,8 @@ const manrope = Manrope({
 });
 
 export const metadata = {
-  title: 'Lifewood Expense AI',
-  description: 'Manage scanned Google Drive expense workspaces with Lifewood branding',
+  title: 'Lifewood Finance AI',
+  description: 'Manage scanned Google Drive finance workspaces with Lifewood branding',
 };
 
 export default function RootLayout({

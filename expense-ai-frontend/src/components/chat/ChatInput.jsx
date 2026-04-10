@@ -78,7 +78,7 @@ export default function ChatInput({
   onStop,
   isSending   = false,
   disabled    = false,
-  placeholder = 'Ask about your expenses...',
+  placeholder = 'Ask about your finances...',
   maxRows     = 4,
 }) {
   const [value,      setValue]      = useState('');
@@ -463,7 +463,7 @@ export default function ChatInput({
               isListening
                 ? 'Speak now…'
                 : attachment
-                  ? 'Which folder? e.g. "Admin Expense" or "create VIP Preparation folder"'
+                  ? 'Which folder? e.g. "Admin Finance" or "create VIP Preparation folder"'
                   : placeholder
             }
             disabled={disabled || isSending}

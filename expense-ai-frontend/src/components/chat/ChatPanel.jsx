@@ -92,7 +92,7 @@ const BUBBLES = [
   'Check if receipts are BIR compliant',
   'Ask for spending by folder',
   'Need help reviewing a receipt?',
-  'Want a quick expense summary?',
+  'Want a quick finance summary?',
   'Need VAT guidance?',
 ];
 
@@ -423,7 +423,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
           <img alt="Lifewood" src={LOGO_URL} style={{ height: '26px', width: 'auto', flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: '14px', fontWeight: 700, color: 'var(--lw-text)' }}>
-              Expense AI
+              Finance AI
             </div>
             <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: '11px', color: 'var(--lw-green)' }}>
               Online · GPT-4o
@@ -453,7 +453,7 @@ export default function ChatPanel({ conversationId, onConversationCreate }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px' }}>
               <div style={{ textAlign: 'center', padding: '14px 0' }}>
                 <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: '13px', color: 'var(--lw-muted)', lineHeight: 1.6 }}>
-                  Ask about your expenses, export to Excel,<br />
+                  Ask about your finances, export to Excel,<br />
                   or <strong style={{ color: 'var(--lw-accent-deep)' }}>📎 attach a receipt</strong> to scan &amp; upload it
                 </div>
               </div>

@@ -19,7 +19,7 @@ type DriveItem = {
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const LOGO_URL =
   'https://framerusercontent.com/images/BZSiFYgRc4wDUAuEybhJbZsIBQY.png';
-const RETURNING_USER_KEY = 'lifewood-expense-ai-returning-user';
+const RETURNING_USER_KEY = 'lifewood-finance-ai-returning-user';
 
 function isFolder(item: DriveItem): boolean {
   return item.mimeType === FOLDER_MIME_TYPE;
@@ -177,16 +177,16 @@ export default function DrivePage() {
   const greetingContent = useMemo(() => {
     if (userType === 'new') {
       return {
-        header: 'Welcome to Expense AI',
+        header: 'Welcome to Finance AI',
         description:
-          'Your AI workspace is ready. Connect a folder to start scanning receipts, organizing expenses, and tracking activity automatically.',
+          'Your AI workspace is ready. Connect a folder to start scanning receipts, organizing finances, and tracking activity automatically.',
       };
     }
 
     return {
       header: 'Welcome back!',
       description:
-        'Your Expense AI workspace is active. Continue reviewing scanned receipts and let AI keep your expenses organized in real time.',
+        'Your Finance AI workspace is active. Continue reviewing scanned receipts and let AI keep your finances organized in real time.',
     };
   }, [userType]);
 
@@ -232,7 +232,7 @@ export default function DrivePage() {
         <a className={styles.brand} href="/drive">
           <img alt="Lifewood" className={styles.brandLogo} src={LOGO_URL} />
           <span className={styles.brandSeparator} aria-hidden="true" />
-          <span className={styles.brandBadge}>Expense AI</span>
+          <span className={styles.brandBadge}>Finance AI</span>
         </a>
 
         {/* ── Centre nav ── */}
@@ -358,7 +358,7 @@ export default function DrivePage() {
 
       <section className={styles.controls}>
         <div className={styles.controlsIntro}>
-          <h2>Expense Folders</h2>
+          <h2>Finance Folders</h2>
           <p>{rootFolders.length} folder{rootFolders.length !== 1 ? 's' : ''} available</p>
         </div>
         <div className={styles.controlActions}>

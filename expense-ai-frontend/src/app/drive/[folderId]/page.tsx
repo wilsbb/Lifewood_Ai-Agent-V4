@@ -331,7 +331,7 @@ export default function FolderWorkspacePage() {
                 &lt;
               </button>
               <span className={styles.titleAccent} />
-              <h2>{selectedFolder.name} - Expense OCR Workspace</h2>
+              <h2>{selectedFolder.name} - Finance OCR Workspace</h2>
             </div>
           </div>
           <div className={styles.workspaceActions}>

@@ -6,6 +6,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import ChatPanel from '../chat/ChatPanel';
 import { getApiBaseUrl } from '../../lib/api';
 
 const BASE_URL = getApiBaseUrl();
@@ -401,6 +402,7 @@ export default function AnalyticsDashboard() {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [convId,      setConvId]      = useState(null);
 
   const [executive,    setExecutive]    = useState(null);
   const [risk,         setRisk]         = useState(null);
@@ -477,7 +479,7 @@ export default function AnalyticsDashboard() {
             fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700,
             textDecoration: 'none',
           }}>
-            ← Expense Dashboard
+            ← Finance Dashboard
           </a>
           <button onClick={load} disabled={loading} style={{
             padding: '7px 16px', borderRadius: 10,
@@ -765,7 +767,7 @@ export default function AnalyticsDashboard() {
         {/* ══════════════════════════════════════════ PORTFOLIO ══ */}
         {activeTab === 'Portfolio' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <SectionHeader title="Portfolio Analytics" subtitle="Expense folder portfolio distribution, VAT breakdown, vendor diversity, and growth analysis" icon="📁" />
+            <SectionHeader title="Portfolio Analytics" subtitle="Finance folder portfolio distribution, VAT breakdown, vendor diversity, and growth analysis" icon="📁" />
 
             {/* Summary cards */}
             {!loading && portfolio?.portfolio_summary && (
@@ -1058,6 +1060,27 @@ export default function AnalyticsDashboard() {
       </main>
 
       <style>{`
+        :root {
+          --lw-white: #ffffff;
+          --lw-sea-salt: #F9F7F7;
+          --lw-dark: #133020;
+          --lw-green: #046241;
+          --lw-accent: #FFB347;
+          --lw-accent-deep: #C17110;
+          --lw-border: rgba(19,48,32,0.12);
+          --lw-muted: #708E7C;
+          --lw-text: #133020;
+          --lw-shadow-soft: 0 18px 40px rgba(19,48,32,0.12);
+          --glass-bg-strong: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.82) 100%);
+          --glass-border: rgba(255,255,255,0.65);
+          --glass-shadow: 0 18px 45px rgba(19,48,32,0.16);
+          --lw-chat-width: 380px;
+          --lw-chat-height: 580px;
+          --lw-chat-right: 28px;
+          --lw-chat-bottom: 96px;
+          --lw-fab-right: 28px;
+          --lw-fab-bottom: 28px;
+        }
         @keyframes shimmer {
           0%   { background-position: -200% 0; }
           100% { background-position: 200% 0; }
@@ -1067,7 +1090,30 @@ export default function AnalyticsDashboard() {
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(4,98,65,0.18); border-radius: 3px; }
+
+        @media (max-width: 900px) {
+          :root {
+            --lw-chat-width: 320px;
+            --lw-chat-height: 520px;
+            --lw-chat-right: 16px;
+            --lw-chat-bottom: 84px;
+            --lw-fab-right: 16px;
+            --lw-fab-bottom: 16px;
+          }
+        }
+
+        @media (max-width: 600px) {
+          :root {
+            --lw-chat-width: calc(100vw - 32px);
+            --lw-chat-height: 70vh;
+          }
+        }
       `}</style>
+
+      <ChatPanel
+        conversationId={convId}
+        onConversationCreate={setConvId}
+      />
     </div>
   );
 }

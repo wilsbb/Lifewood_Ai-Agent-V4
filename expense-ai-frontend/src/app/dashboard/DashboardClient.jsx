@@ -180,7 +180,7 @@ export default function DashboardClient() {
                 margin: 0,
                 letterSpacing: '-0.02em',
               }}>
-                Expense Dashboard
+                Finance Dashboard
               </h1>
               <p style={{ color: 'var(--lw-muted)', fontSize: '13px', marginTop: '6px', marginBottom: 0 }}>
                 {lastRefresh
