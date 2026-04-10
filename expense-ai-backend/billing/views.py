@@ -913,67 +913,6 @@ def n8n_analytics_proxy(request):
 # GOOGLE DRIVE HELPERS (for chat upload)
 # ─────────────────────────────────────────────
 
-def _get_drive_folders():
-    """
-    Returns all Google Drive folders as a list of dicts: [{id, name, parent_id}]
-    Scoped to folders that contain 'lifewood' OR all folders if none found.
-    """
-    creds = _get_n8n_credentials()
-    if not creds:
-        return []
-    from googleapiclient.discovery import build
-    service = build('drive', 'v3', credentials=creds)
-    results = service.files().list(
-        q="mimeType='application/vnd.google-apps.folder' and trashed=false",
-        fields="files(id, name, parents)",
-        pageSize=200,
-        orderBy="name",
-    ).execute()
-    return results.get('files', [])
-
-
-def _create_drive_folder(folder_name, parent_id=None):
-    """Creates a new Google Drive folder and returns (id, name)."""
-    creds = _get_n8n_credentials()
-    if not creds:
-        raise Exception('No Google Drive credentials available')
-    from googleapiclient.discovery import build
-    service = build('drive', 'v3', credentials=creds)
-    metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-    }
-    if parent_id:
-        metadata['parents'] = [parent_id]
-    folder = service.files().create(body=metadata, fields='id,name').execute()
-    return folder['id'], folder['name']
-
-
-def _upload_file_to_drive_folder(folder_id, file_obj, filename, mime_type):
-    """Uploads a Django InMemoryUploadedFile to a Drive folder. Returns (file_id, file_name)."""
-    from io import BytesIO
-    creds = _get_n8n_credentials()
-    if not creds:
-        raise Exception('No Google Drive credentials available')
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseUpload
-    service = build('drive', 'v3', credentials=creds)
-
-    buffer = BytesIO()
-    for chunk in file_obj.chunks():
-        buffer.write(chunk)
-    buffer.seek(0)
-
-    file_metadata = {'name': filename, 'parents': [folder_id]}
-    media = MediaIoBaseUpload(
-        buffer,
-        mimetype=mime_type or 'application/octet-stream',
-        resumable=False,
-    )
-    uploaded = service.files().create(body=file_metadata, media_body=media, fields='id,name').execute()
-    return uploaded['id'], uploaded['name']
-
-
 # ─────────────────────────────────────────────
 # SHARED OCR HELPER
 # ─────────────────────────────────────────────
