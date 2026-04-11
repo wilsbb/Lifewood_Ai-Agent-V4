@@ -32,6 +32,8 @@ venv/
 ENV/
 .env/
 .venv/
+.venv312/
+.tmp-py/
 env/
 
 # Installer logs

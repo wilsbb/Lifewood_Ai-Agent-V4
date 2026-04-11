@@ -226,8 +226,9 @@ export default function DrivePage() {
   }
 
   return (
-    <main className={styles.pageShell}>
-      <header className={styles.topbar}>
+    <>
+      <main className={styles.pageShell}>
+        <header className={styles.topbar}>
         {/* ── Brand ── */}
         <a className={styles.brand} href="/drive">
           <img alt="Lifewood" className={styles.brandLogo} src={LOGO_URL} />
@@ -451,7 +452,9 @@ export default function DrivePage() {
           )}
         </section>
       )}
-      </div>
-    </main>
+        </div>
+      </main>
+
+    </>
   );
 }
