@@ -359,7 +359,7 @@ function PortfolioTreemap({ folders, loading }) {
   );
 }
 
-function AnomalyTable({ items, loading }) {
+function AnomalyTable({ items, loading, page, totalPages, totalItems, onPageChange }) {
   if (loading) return <div style={card}><Skeleton h={160} /></div>;
   if (!items?.length) return (
     <div style={{ ...card, textAlign: 'center', color: T.muted, fontFamily: "'Manrope', sans-serif", fontSize: 13, padding: '32px 24px' }}>
@@ -403,6 +403,12 @@ function AnomalyTable({ items, loading }) {
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }
@@ -484,11 +490,74 @@ function NavTab({ label, active, onClick, alert }) {
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────
+const PAGE_SIZE = 5;
 const TABS = ['Executive', 'Risk', 'Cash Flow', 'Portfolio', 'Compliance', 'Performance'];
+
+function PaginationControls({ page, totalPages, totalItems, onPageChange }) {
+  if (totalItems <= PAGE_SIZE) return null;
+
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 16,
+      flexWrap: 'wrap',
+      fontFamily: "'Manrope', sans-serif",
+    }}>
+      <div style={{ fontSize: 11, color: T.muted }}>
+        Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, totalItems)} of {totalItems}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          disabled={page === 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          style={{
+            background: 'rgba(255,255,255,0.78)',
+            border: `1px solid ${T.border}`,
+            borderRadius: 10,
+            padding: '7px 12px',
+            color: T.greenDk,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: page === 1 ? 'not-allowed' : 'pointer',
+            opacity: page === 1 ? 0.5 : 1,
+          }}
+        >
+          Prev
+        </button>
+        <span style={{ fontSize: 11, color: T.muted }}>
+          Page {page} of {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={page === totalPages}
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          style={{
+            background: 'rgba(255,255,255,0.78)',
+            border: `1px solid ${T.border}`,
+            borderRadius: 10,
+            padding: '7px 12px',
+            color: T.greenDk,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: page === totalPages ? 'not-allowed' : 'pointer',
+            opacity: page === totalPages ? 0.5 : 1,
+          }}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AnalyticsDashboard() {
   const router = useRouter();
   const [activeTab,   setActiveTab]   = useState('Executive');
+  const [tabPages,    setTabPages]    = useState({});
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -586,6 +655,30 @@ export default function AnalyticsDashboard() {
   const adminInitials = getAdminInitials(adminSession.displayName);
   const adminUsername = adminSession.email || '';
   const formattedLastLogin = formatAdminLastLogin(adminSession.lastLogin);
+  const setPageForKey = useCallback((key, page) => {
+    setTabPages((current) => ({ ...current, [key]: page }));
+  }, []);
+  const paginateItems = useCallback((key, items = []) => {
+    const totalItems = items.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+    const currentPage = Math.min(tabPages[key] || 1, totalPages);
+    const start = (currentPage - 1) * PAGE_SIZE;
+
+    return {
+      items: items.slice(start, start + PAGE_SIZE),
+      currentPage,
+      totalItems,
+      totalPages,
+    };
+  }, [tabPages]);
+
+  const anomalyRows = paginateItems('risk-anomalies', risk?.anomalous_transactions || []);
+  const categoryRiskRows = paginateItems('risk-category', risk?.category_risk || []);
+  const budgetAlertRows = paginateItems('risk-budget', risk?.budget_alerts || []);
+  const topSpendingDayRows = paginateItems('cashflow-top-days', cashflow?.top_spending_days || []);
+  const portfolioRows = paginateItems('portfolio-breakdown', portfolio?.folder_portfolio || []);
+  const criticalReceiptRows = paginateItems('compliance-critical', compliance?.critical_receipts || []);
+  const folderPerformanceRows = paginateItems('performance-folders', performance?.folder_mom_performance || []);
 
   const handleSaveProfile = (event) => {
     event.preventDefault();
@@ -1117,7 +1210,7 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* Sparkline + top folder */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
               <div style={card}>
                 <div style={label}>6-Month Spend Sparkline</div>
                 <ResponsiveContainer width="100%" height={160}>
@@ -1168,9 +1261,9 @@ export default function AnalyticsDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <SectionHeader title="Risk Analytics" subtitle="BIR compliance risk, anomaly detection, vendor concentration, and budget overruns" icon="⚠️" />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
               <RiskGauge score={risk?.summary?.risk_score || 0} loading={loading} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
                   { label: 'Total Receipts',   value: risk?.summary?.total_receipts  || 0, fmt: 'integer' },
                   { label: 'Compliant',         value: risk?.summary?.compliant       || 0, fmt: 'integer' },
@@ -1197,7 +1290,7 @@ export default function AnalyticsDashboard() {
             {!loading && risk?.amount_stats && (
               <div style={{ ...card }}>
                 <div style={label}>Statistical Distribution of Transaction Amounts</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginTop: 16 }}>
                   {[
                     { label: 'Average',           value: php(risk.amount_stats.average) },
                     { label: 'Std Deviation',     value: php(risk.amount_stats.std_dev) },
@@ -1218,24 +1311,31 @@ export default function AnalyticsDashboard() {
               </div>
             )}
 
-            <AnomalyTable items={risk?.anomalous_transactions || []} loading={loading} />
+            <AnomalyTable
+              items={anomalyRows.items}
+              loading={loading}
+              page={anomalyRows.currentPage}
+              totalPages={anomalyRows.totalPages}
+              totalItems={anomalyRows.totalItems}
+              onPageChange={(page) => setPageForKey('risk-anomalies', page)}
+            />
 
             {/* Category risk */}
             {!loading && risk?.category_risk?.length > 0 && (
               <div style={card}>
                 <div style={label}>Category Concentration Risk</div>
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {risk.category_risk.map((c, i) => {
+                  {categoryRiskRows.items.map((c, i) => {
                     const barColor = c.risk_level === 'high' ? T.red : c.risk_level === 'medium' ? T.amber : T.green;
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, width: 180, flexShrink: 0, color: T.greenDk, fontWeight: 600 }}>
+                      <div key={`${c.folder}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, minWidth: 140, flex: '1 1 180px', color: T.greenDk, fontWeight: 600 }}>
                           {c.folder}
                         </div>
-                        <div style={{ flex: 1, height: 8, background: 'rgba(19,48,32,0.08)', borderRadius: 4 }}>
+                        <div style={{ flex: '999 1 220px', height: 8, background: 'rgba(19,48,32,0.08)', borderRadius: 4 }}>
                           <div style={{ height: '100%', width: `${c.pct_of_spend}%`, background: barColor, borderRadius: 4, transition: 'width 0.6s ease' }} />
                         </div>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, width: 48, textAlign: 'right', color: barColor, fontWeight: 700 }}>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, minWidth: 48, textAlign: 'right', color: barColor, fontWeight: 700 }}>
                           {c.pct_of_spend}%
                         </div>
                         <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: `${barColor}18`, color: barColor, fontWeight: 700, fontFamily: "'Manrope', sans-serif" }}>
@@ -1245,6 +1345,12 @@ export default function AnalyticsDashboard() {
                     );
                   })}
                 </div>
+                <PaginationControls
+                  page={categoryRiskRows.currentPage}
+                  totalPages={categoryRiskRows.totalPages}
+                  totalItems={categoryRiskRows.totalItems}
+                  onPageChange={(page) => setPageForKey('risk-category', page)}
+                />
               </div>
             )}
 
@@ -1252,8 +1358,8 @@ export default function AnalyticsDashboard() {
             {!loading && risk?.budget_alerts?.length > 0 && (
               <div style={{ ...card, borderLeft: `3px solid ${T.red}` }}>
                 <div style={{ ...label, color: T.red, marginBottom: 12 }}>🚨 Budget Overrun Alerts</div>
-                {risk.budget_alerts.map((b, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < risk.budget_alerts.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                {budgetAlertRows.items.map((b, i) => (
+                  <div key={`${b.folder}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0', borderBottom: i < budgetAlertRows.items.length - 1 ? `1px solid ${T.border}` : 'none' }}>
                     <div>
                       <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 700, color: T.greenDk }}>{b.folder}</div>
                       <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 11, color: T.muted, marginTop: 2 }}>Budget: {php(b.budgeted)} · Actual: {php(b.actual)}</div>
@@ -1263,6 +1369,12 @@ export default function AnalyticsDashboard() {
                     </div>
                   </div>
                 ))}
+                <PaginationControls
+                  page={budgetAlertRows.currentPage}
+                  totalPages={budgetAlertRows.totalPages}
+                  totalItems={budgetAlertRows.totalItems}
+                  onPageChange={(page) => setPageForKey('risk-budget', page)}
+                />
               </div>
             )}
           </div>
@@ -1284,7 +1396,7 @@ export default function AnalyticsDashboard() {
 
             {/* Current month status */}
             {!loading && cashflow?.current_month && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
                 {[
                   { label: 'Spend To Date',        value: php(cashflow.current_month.outflow_to_date) },
                   { label: 'Days Elapsed',          value: cashflow.current_month.days_elapsed + ' days' },
@@ -1320,21 +1432,27 @@ export default function AnalyticsDashboard() {
               <div style={card}>
                 <div style={label}>Highest Single-Day Outlays (Last 90 Days)</div>
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {cashflow.top_spending_days.slice(0, 8).map((d, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: `1px solid ${T.border}` }}>
-                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, color: T.muted, width: 100, flexShrink: 0 }}>{d.date}</div>
-                      <div style={{ flex: 1, height: 6, background: 'rgba(19,48,32,0.06)', borderRadius: 3 }}>
+                  {topSpendingDayRows.items.map((d, i) => (
+                    <div key={`${d.date}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '8px 0', borderBottom: `1px solid ${T.border}` }}>
+                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, color: T.muted, minWidth: 100, flex: '0 1 100px' }}>{d.date}</div>
+                      <div style={{ flex: '999 1 220px', height: 6, background: 'rgba(19,48,32,0.06)', borderRadius: 3 }}>
                         <div style={{
                           height: '100%',
-                          width: `${(parseFloat(d.total) / parseFloat(cashflow.top_spending_days[0].total)) * 100}%`,
+                          width: `${(parseFloat(d.total) / parseFloat((cashflow.top_spending_days || [])[0]?.total || 1)) * 100}%`,
                           background: T.accent, borderRadius: 3,
                         }} />
                       </div>
-                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 700, color: T.amber, width: 120, textAlign: 'right' }}>{php(d.total)}</div>
-                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 11, color: T.muted, width: 60, textAlign: 'right' }}>{d.count} receipts</div>
+                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 700, color: T.amber, minWidth: 120, textAlign: 'right' }}>{php(d.total)}</div>
+                      <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 11, color: T.muted, minWidth: 80, textAlign: 'right' }}>{d.count} receipts</div>
                     </div>
                   ))}
                 </div>
+                <PaginationControls
+                  page={topSpendingDayRows.currentPage}
+                  totalPages={topSpendingDayRows.totalPages}
+                  totalItems={topSpendingDayRows.totalItems}
+                  onPageChange={(page) => setPageForKey('cashflow-top-days', page)}
+                />
               </div>
             )}
           </div>
@@ -1380,7 +1498,7 @@ export default function AnalyticsDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {portfolio.folder_portfolio.map((f, i) => (
+                      {portfolioRows.items.map((f, i) => (
                         <tr key={i}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(19,48,32,0.03)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -1409,12 +1527,18 @@ export default function AnalyticsDashboard() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={portfolioRows.currentPage}
+                  totalPages={portfolioRows.totalPages}
+                  totalItems={portfolioRows.totalItems}
+                  onPageChange={(page) => setPageForKey('portfolio-breakdown', page)}
+                />
               </div>
             )}
 
             {/* VAT breakdown pie */}
             {!loading && portfolio?.vat_breakdown?.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
                 <div style={card}>
                   <div style={label}>VAT Type Distribution</div>
                   <ResponsiveContainer width="100%" height={200}>
@@ -1450,7 +1574,7 @@ export default function AnalyticsDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <SectionHeader title="BIR Compliance Reporting" subtitle="Philippine Bureau of Internal Revenue compliance tracking, field completion, and monthly audit trail" icon="📋" />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
               {/* Score dial */}
               <div style={{ ...card, textAlign: 'center' }}>
                 <div style={label}>Compliance Score</div>
@@ -1529,7 +1653,7 @@ export default function AnalyticsDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {compliance.critical_receipts.map((r, i) => (
+                      {criticalReceiptRows.items.map((r, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
                           <td style={{ padding: '9px 12px', color: T.muted }}>{r.expense_date || '—'}</td>
                           <td style={{ padding: '9px 12px', fontWeight: 600, color: T.greenDk }}>{r.business_name || 'Unknown'}</td>
@@ -1547,6 +1671,12 @@ export default function AnalyticsDashboard() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={criticalReceiptRows.currentPage}
+                  totalPages={criticalReceiptRows.totalPages}
+                  totalItems={criticalReceiptRows.totalItems}
+                  onPageChange={(page) => setPageForKey('compliance-critical', page)}
+                />
               </div>
             )}
           </div>
@@ -1597,21 +1727,27 @@ export default function AnalyticsDashboard() {
               <div style={card}>
                 <div style={label}>Folder Month-over-Month Performance</div>
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {performance.folder_mom_performance.map((f, i) => {
+                  {folderPerformanceRows.items.map((f, i) => {
                     const trendColor = f.trend === 'up' ? T.red : f.trend === 'down' ? T.green : T.muted;
                     const trendIcon  = f.trend === 'up' ? '▲' : f.trend === 'down' ? '▼' : '→';
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 600, color: T.greenDk, width: 180, flexShrink: 0 }}>{f.folder}</div>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, color: T.muted, width: 100 }}>Prev: {php(f.previous_month)}</div>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700, color: T.amber, flex: 1 }}>Curr: {php(f.current_month)}</div>
-                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 700, color: trendColor, width: 80, textAlign: 'right' }}>
+                      <div key={`${f.folder}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 600, color: T.greenDk, minWidth: 160, flex: '1 1 180px' }}>{f.folder}</div>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, color: T.muted, minWidth: 120 }}>Prev: {php(f.previous_month)}</div>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700, color: T.amber, flex: '1 1 160px' }}>Curr: {php(f.current_month)}</div>
+                        <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 700, color: trendColor, minWidth: 90, textAlign: 'right' }}>
                           {trendIcon} {f.change_pct != null ? `${Math.abs(f.change_pct).toFixed(1)}%` : 'New'}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                <PaginationControls
+                  page={folderPerformanceRows.currentPage}
+                  totalPages={folderPerformanceRows.totalPages}
+                  totalItems={folderPerformanceRows.totalItems}
+                  onPageChange={(page) => setPageForKey('performance-folders', page)}
+                />
               </div>
             )}
 
