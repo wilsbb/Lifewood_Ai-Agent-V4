@@ -604,6 +604,17 @@ export default function AnalyticsDashboard() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    import('../../lib/auth').then(({ getStoredSession }) => {
+      const session = getStoredSession();
+      if (session && !session.canAccessAnalytics) {
+        router.replace('/dashboard');
+      }
+    }).catch(() => {
+      // ignore auth import failures until app initializes
+    });
+  }, [router]);
+
+  useEffect(() => {
     try {
       const storedSession = readAdminSession(window.sessionStorage);
       const storedName = getStoredAdminProfileName(window.localStorage);
@@ -717,14 +728,26 @@ export default function AnalyticsDashboard() {
     setProfileOpen(false);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    // Clear new role-based session
+    try {
+      const { clearSession } = await import('../../lib/auth');
+      const { getApiBaseUrl } = await import('../../lib/api');
+      await fetch(`${getApiBaseUrl()}/api/users/logout/`, {
+        method: 'POST',
+        credentials: 'include',
+      }).catch(() => {});
+      clearSession();
+    } catch {}
+
+    // Clear legacy session
     try {
       window.sessionStorage.removeItem(ADMIN_AUTH_KEY);
       window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
     } catch {}
 
     setProfileOpen(false);
-    router.replace('/dashboard');
+    router.replace('/');
   };
 
   return (

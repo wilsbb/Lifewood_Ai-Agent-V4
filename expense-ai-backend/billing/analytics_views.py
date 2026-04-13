@@ -44,7 +44,24 @@ def require_auth(func):
 
 
 def get_user_receipts(user):
+    """
+    Returns a Receipt queryset scoped to the given user.
+
+    • Predefined admin users (is_predefined=True) see ALL receipts —
+      they are managing the company's shared Finance Drive.
+    • Regular users see only their own receipts + unassigned receipts.
+    """
     from django.db.models import Q
+    from .models import Receipt  # relative import works for billing/views.py;
+                                  # for analytics_views.py keep as-is (already imported)
+
+    try:
+        profile = user.admin_profile
+        if profile.is_predefined:
+            return Receipt.objects.all()
+    except Exception:
+        pass
+
     return Receipt.objects.filter(Q(user=user) | Q(user__isnull=True))
 
 

@@ -21,4 +21,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/google/', include('google_drive.urls')),
     path('api/billing/', include('billing.urls')),
+    path('api/users/',   include('admin_users.urls')),
 ]

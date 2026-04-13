@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import { getStoredSession } from '../../lib/auth';
 import SpendSummaryCards from '../../components/analytics/SpendSummaryCards';
 import CategoryChart     from '../../components/analytics/CategoryChart';
 import TrendsChart       from '../../components/analytics/TrendsChart';
@@ -61,6 +62,13 @@ export default function DashboardClient() {
   // FIX: period is now used as a dependency for data loading
   const [period,     setPeriod]     = useState('month');
   const [lastRefresh, setLastRefresh] = useState(null);
+
+  useEffect(() => {
+    const session = getStoredSession();
+    if (!session) {
+      window.location.replace('/');
+    }
+  }, []);
 
   // FIX: load() now accepts the period and passes it to the API calls
   const load = useCallback(async (activePeriod = 'month') => {
