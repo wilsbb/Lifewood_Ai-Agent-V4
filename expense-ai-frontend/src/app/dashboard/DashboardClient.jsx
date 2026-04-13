@@ -7,6 +7,7 @@ import CategoryChart     from '../../components/analytics/CategoryChart';
 import TrendsChart       from '../../components/analytics/TrendsChart';
 import RecentReceipts    from '../../components/analytics/RecentReceipts';
 import ComplianceAlerts  from '../../components/analytics/ComplianceAlerts';
+import UserProfileMenu   from '../../components/common/UserProfileMenu';
 import {
   fetchSummary, fetchCategories, fetchTrends, fetchReceipts,
 } from '../../lib/api';
@@ -59,6 +60,7 @@ export default function DashboardClient() {
   const [receipts,   setReceipts]   = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
+  const [canSeeAnalytics, setCanSeeAnalytics] = useState(false);
   // FIX: period is now used as a dependency for data loading
   const [period,     setPeriod]     = useState('month');
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -67,7 +69,9 @@ export default function DashboardClient() {
     const session = getStoredSession();
     if (!session) {
       window.location.replace('/');
+      return;
     }
+    setCanSeeAnalytics(Boolean(session.canAccessAnalytics || session.role === 'super_admin'));
   }, []);
 
   // FIX: load() now accepts the period and passes it to the API calls
@@ -156,6 +160,7 @@ export default function DashboardClient() {
               </svg>
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
+            <UserProfileMenu />
           </div>
         </nav>
 
@@ -168,15 +173,27 @@ export default function DashboardClient() {
             gap: '16px',
             flexWrap: 'wrap',
           }}>
-            <a className="lw-back" href="/drive">
-              <span className="lw-back-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" height="18" width="18" aria-hidden="true">
-                  <path d="M224 480h640a32 32 0 1 1 0 64H224a32 32 0 0 1 0-64z" fill="#000000" />
-                  <path d="m237.248 512 265.408 265.344a32 32 0 0 1-45.312 45.312l-288-288a32 32 0 0 1 0-45.312l288-288a32 32 0 1 1 45.312 45.312L237.248 512z" fill="#000000" />
-                </svg>
-              </span>
-              <span className="lw-back-text">Back to Drive</span>
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <a className="lw-back" href="/drive">
+                <span className="lw-back-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" height="18" width="18" aria-hidden="true">
+                    <path d="M224 480h640a32 32 0 1 1 0 64H224a32 32 0 0 1 0-64z" fill="#000000" />
+                    <path d="m237.248 512 265.408 265.344a32 32 0 0 1-45.312 45.312l-288-288a32 32 0 0 1 0-45.312l288-288a32 32 0 1 1 45.312 45.312L237.248 512z" fill="#000000" />
+                  </svg>
+                </span>
+                <span className="lw-back-text">Back to Drive</span>
+              </a>
+              {canSeeAnalytics ? (
+                <a className="lw-back" href="/analytics">
+                  <span className="lw-back-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="18" width="18" aria-hidden="true">
+                      <path d="M4 19h16v2H2V3h2v16zm2-2V8h3v9H6zm5 0V4h3v13h-3zm5 0v-6h3v6h-3z" fill="#000000" />
+                    </svg>
+                  </span>
+                  <span className="lw-back-text">Analytics</span>
+                </a>
+              ) : null}
+            </div>
             <div style={{ minWidth: '240px', textAlign: 'right' }}>
               <h1 style={{
                 fontFamily: "'Manrope', sans-serif",
