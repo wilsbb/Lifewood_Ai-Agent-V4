@@ -69,34 +69,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         force_pw = options.get('force_password', True)
         sync_predefined_users(force_password=force_pw)
-            user, created = User.objects.get_or_create(
-                username=spec['username'],
-                defaults={'email': spec['email'], 'is_active': True},
-            )
-
-            # Always ensure these fields are correct
-            if not created:
-                user.email     = spec['email']
-                user.is_active = True
-
-            if created or force_pw:
-                user.set_password(spec['password'])
-
-            user.save()
-
-            # Create or update the profile
-            profile, _ = AdminUserProfile.objects.get_or_create(user=user)
-            profile.role                    = spec['role']
-            profile.is_predefined           = True
-            profile.use_shared_google_drive = True
-            profile.save()
-
-            label = 'Created' if created else 'Updated'
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'[{label}] {spec["role"].upper()}: {spec["username"]} '
-                    f'(use_shared_google_drive=True)'
-                )
-            )
-
         self.stdout.write(self.style.SUCCESS('\nPredefined users are ready.'))
