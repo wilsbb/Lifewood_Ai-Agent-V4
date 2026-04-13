@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield } from 'lucide-react';
+import { Lock, Shield, User } from 'lucide-react';
 import styles from './page.module.css';
 import { getApiBaseUrl } from '../lib/api';
 import { getStoredSession, storeSession, type UserSession } from '../lib/auth';
@@ -81,51 +81,70 @@ export default function HomePage() {
   return (
     <main className={styles.shell}>
       <section className={styles.card}>
-        <div className={styles.logoWrap}>
-          <img alt="Lifewood" className={styles.logo} src={LOGO_URL} />
-        </div>
+        <aside className={styles.brandPanel} aria-label="Brand">
+          <div className={styles.brandInner}>
+            <div className={styles.brandText}>
+              <div className={styles.brandProductLogoWrap}>
+                <span className={styles.fainanceLogo} aria-label="FAINANCE">
+                  <span className={styles.fainanceF}>F</span>
+                  <span className={styles.fainanceAI}>AI</span>
+                  <span className={styles.fainanceNANCE}>NANCE</span>
+                </span>
+              </div>
+              <p className={styles.brandSubtitle}>Finance Workspace</p>
+            </div>
+          </div>
+        </aside>
 
-        <div className={styles.content}>
-          <span className={styles.kicker}>Finance workspace</span>
-          <h1 className={styles.heading}>fAInance</h1>
-          <p className={styles.desc}>
-            Enter your credentials to open the Lifewood Finance workspace.
-          </p>
+        <div className={styles.formPanel} aria-label="Sign in">
+          <header className={styles.formHeader}>
+            <img alt="Lifewood" className={styles.formLogo} src={LOGO_URL} />
+            <h1 className={styles.formTitle}>Welcome Back</h1>
+            <p className={styles.formSubtitle}>
+              Sign in to your Lifewood Finance account.
+            </p>
+          </header>
 
           <form className={styles.loginForm} onSubmit={handleLogin}>
             <label className={styles.field}>
-              <span>Username</span>
-              <input
-                autoCapitalize="none"
-                autoComplete="username"
-                autoCorrect="off"
-                className={styles.input}
-                disabled={loading}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (error) setError('');
-                }}
-                placeholder="Enter username"
-                spellCheck="false"
-                type="text"
-                value={username}
-              />
+              <span className={styles.labelText}>Username</span>
+              <div className={styles.inputWrap}>
+                <User className={styles.inputIcon} size={18} aria-hidden="true" />
+                <input
+                  autoCapitalize="none"
+                  autoComplete="username"
+                  autoCorrect="off"
+                  className={styles.input}
+                  disabled={loading}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Enter username"
+                  spellCheck="false"
+                  type="text"
+                  value={username}
+                />
+              </div>
             </label>
 
             <label className={styles.field}>
-              <span>Password</span>
-              <input
-                autoComplete="current-password"
-                className={styles.input}
-                disabled={loading}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (error) setError('');
-                }}
-                placeholder="Enter password"
-                type="password"
-                value={password}
-              />
+              <span className={styles.labelText}>Password</span>
+              <div className={styles.inputWrap}>
+                <Lock className={styles.inputIcon} size={18} aria-hidden="true" />
+                <input
+                  autoComplete="current-password"
+                  className={styles.input}
+                  disabled={loading}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Enter password"
+                  type="password"
+                  value={password}
+                />
+              </div>
             </label>
 
             {error ? <p className={styles.error}>{error}</p> : null}
@@ -140,14 +159,6 @@ export default function HomePage() {
               </button>
             </div>
           </form>
-        </div>
-
-        <div className={styles.footer}>
-          <div className={styles.footerLeft}>
-            <Shield size={14} />
-            <span>Secure employee access</span>
-          </div>
-          <span>&copy; {new Date().getFullYear()} Lifewood</span>
         </div>
       </section>
     </main>
