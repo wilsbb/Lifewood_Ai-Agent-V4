@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { driveService } from '../../../services/driveService';
+import { getStoredSession } from '../../../lib/auth';
 import styles from '../page.module.css';
 
 type DriveItem = {
@@ -129,8 +130,13 @@ export default function FolderWorkspacePage() {
   }
 
   useEffect(() => {
+    const session = getStoredSession();
+    if (!session) {
+      router.replace('/');
+      return;
+    }
     fetchFiles();
-  }, []);
+  }, [router]);
 
   const selectedFolder = findItemById(folders, folderId) ?? null;
   const selectedContents = useMemo(() => {

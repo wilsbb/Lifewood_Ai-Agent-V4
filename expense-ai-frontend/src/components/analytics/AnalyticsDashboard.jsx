@@ -2,25 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { getStoredSession } from '../../lib/auth';
+import { useProfile } from '../../lib/useProfile';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { getApiBaseUrl } from '../../lib/api';
-import {
-  ADMIN_AUTH_KEY,
-  ADMIN_PROFILE_NAME_KEY,
-  ADMIN_SECRET_PHRASE_KEY,
-  ADMIN_SESSION_KEY,
-  buildAdminSession,
-  formatAdminLastLogin,
-  getAdminInitials,
-  getStoredAdminProfileName,
-  getStoredAdminSecretPhrase,
-  normalizeSecretPhrase,
-  readAdminSession,
-} from '../../lib/adminAnalytics';
+import { getApiBaseUrl, fetchReceipts } from '../../lib/api';
+import ComplianceAlerts from './ComplianceAlerts';
+import RecentReceipts from './RecentReceipts';
 
 const BASE_URL = getApiBaseUrl();
 const LOGO_URL = 'https://framerusercontent.com/images/BZSiFYgRc4wDUAuEybhJbZsIBQY.png?width=1519&height=429';
@@ -57,82 +48,6 @@ const label = {
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   color:         T.muted,
-};
-
-const profileActionStyle = {
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  fontFamily: "'Manrope', sans-serif",
-  fontSize: 13,
-  fontWeight: 700,
-  textAlign: 'left',
-  padding: '12px 14px',
-  borderRadius: 14,
-  cursor: 'pointer',
-  transition: 'transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease',
-};
-
-const profileActionIconStyle = {
-  width: 28,
-  height: 28,
-  borderRadius: '50%',
-  display: 'grid',
-  placeItems: 'center',
-  flexShrink: 0,
-  fontSize: 12,
-};
-
-const secretFieldWrapStyle = {
-  position: 'relative',
-};
-
-const secretFieldInputStyle = {
-  width: '100%',
-  borderRadius: 14,
-  border: '1px solid rgba(19,48,32,0.10)',
-  background: 'rgba(255,255,255,0.82)',
-  color: T.greenDk,
-  padding: '13px 54px 13px 14px',
-  outline: 'none',
-  fontFamily: "'Manrope', sans-serif",
-  fontSize: 14,
-};
-
-const secretRevealButtonStyle = {
-  position: 'absolute',
-  top: '50%',
-  right: 12,
-  transform: 'translateY(-50%)',
-  width: 30,
-  height: 30,
-  borderRadius: 10,
-  border: '0',
-  background: 'transparent',
-  color: T.green,
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-};
-
-const modalOverlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(8, 19, 26, 0.44)',
-  display: 'grid',
-  placeItems: 'center',
-  padding: 20,
-  zIndex: 200,
-};
-
-const modalCardStyle = {
-  width: 'min(100%, 420px)',
-  borderRadius: 24,
-  background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(249,246,238,0.98) 100%)',
-  border: '1px solid rgba(193,113,16,0.18)',
-  boxShadow: '0 28px 60px rgba(19,48,32,0.22)',
-  overflow: 'hidden',
 };
 
 function php(v) {
@@ -491,7 +406,7 @@ function NavTab({ label, active, onClick, alert }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 const PAGE_SIZE = 5;
-const TABS = ['Executive', 'Risk', 'Cash Flow', 'Portfolio', 'Compliance', 'Performance'];
+const TABS = ['Executive', 'Risk', 'Cash Flow', 'Portfolio', 'Compliance', 'Performance', 'Receipt'];
 
 function PaginationControls({ page, totalPages, totalItems, onPageChange }) {
   if (totalItems <= PAGE_SIZE) return null;
@@ -562,37 +477,45 @@ export default function AnalyticsDashboard() {
   const [error,       setError]       = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
-  const [secretEditorOpen, setSecretEditorOpen] = useState(false);
-  const [profileNameInput, setProfileNameInput] = useState('');
-  const [profileUsernameInput, setProfileUsernameInput] = useState('');
-  const [currentSecretPhrase, setCurrentSecretPhrase] = useState('');
-  const [secretPhraseInput, setSecretPhraseInput] = useState('');
-  const [showCurrentSecretPhrase, setShowCurrentSecretPhrase] = useState(false);
-  const [showNewSecretPhrase, setShowNewSecretPhrase] = useState(false);
-  const [adminSession, setAdminSession] = useState(() => buildAdminSession());
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [executive,    setExecutive]    = useState(null);
   const [risk,         setRisk]         = useState(null);
   const [cashflow,     setCashflow]     = useState(null);
   const [portfolio,    setPortfolio]    = useState(null);
   const [compliance,   setCompliance]   = useState(null);
   const [performance,  setPerformance]  = useState(null);
+  const [receipts,     setReceipts]     = useState([]);
   const profileRef = useRef(null);
+
+  const {
+    session: userSession,
+    displayName,
+    displayNameInput,
+    setDisplayNameInput,
+    handleSaveDisplayName,
+    handleSignOut: globalSignOut,
+    saving: profileSaving,
+    roleLabel,
+    initials,
+  } = useProfile();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ex, ri, cf, po, co, pe] = await Promise.all([
+      const [ex, ri, cf, po, co, pe, recpts] = await Promise.all([
         apiFetch('/api/billing/analytics/executive/'),
         apiFetch('/api/billing/analytics/risk/'),
         apiFetch('/api/billing/analytics/cashflow/'),
         apiFetch('/api/billing/analytics/portfolio/'),
         apiFetch('/api/billing/analytics/compliance/'),
         apiFetch('/api/billing/analytics/performance/'),
+        fetchReceipts({ limit: 50 }),
       ]);
       setExecutive(ex);   setRisk(ri);        setCashflow(cf);
       setPortfolio(po);   setCompliance(co);  setPerformance(pe);
+      setReceipts(recpts.receipts || recpts || []);
       setLastRefresh(new Date());
     } catch (e) {
       setError(e.message);
@@ -613,30 +536,6 @@ export default function AnalyticsDashboard() {
       // ignore auth import failures until app initializes
     });
   }, [router]);
-
-  useEffect(() => {
-    try {
-      const storedSession = readAdminSession(window.sessionStorage);
-      const storedName = getStoredAdminProfileName(window.localStorage);
-      const storedSecretPhrase = getStoredAdminSecretPhrase(window.localStorage);
-      const nextSession = storedSession
-        ? { ...storedSession, displayName: storedName || storedSession.displayName }
-        : buildAdminSession({ displayName: storedName });
-
-      setAdminSession(nextSession);
-      setProfileNameInput(nextSession.displayName);
-      setProfileUsernameInput(nextSession.email || '');
-      setCurrentSecretPhrase(storedSecretPhrase);
-      setSecretPhraseInput('');
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!secretEditorOpen) {
-      setShowCurrentSecretPhrase(false);
-      setShowNewSecretPhrase(false);
-    }
-  }, [secretEditorOpen]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -663,9 +562,7 @@ export default function AnalyticsDashboard() {
 
   const hasRiskAlert      = risk?.summary?.risk_level === 'high' || risk?.summary?.risk_level === 'critical';
   const hasComplianceAlert = compliance && compliance.compliance_score < 80;
-  const adminInitials = getAdminInitials(adminSession.displayName);
-  const adminUsername = adminSession.email || '';
-  const formattedLastLogin = formatAdminLastLogin(adminSession.lastLogin);
+  
   const setPageForKey = useCallback((key, page) => {
     setTabPages((current) => ({ ...current, [key]: page }));
   }, []);
@@ -691,63 +588,20 @@ export default function AnalyticsDashboard() {
   const criticalReceiptRows = paginateItems('compliance-critical', compliance?.critical_receipts || []);
   const folderPerformanceRows = paginateItems('performance-folders', performance?.folder_mom_performance || []);
 
-  const handleSaveProfile = (event) => {
-    event.preventDefault();
-
-    const nextName = profileNameInput.trim() || adminSession.displayName;
-    const nextUsername = profileUsernameInput.trim() || adminUsername;
-    const nextSession = {
-      ...adminSession,
-      displayName: nextName,
-      email: nextUsername,
-    };
-
-    try {
-      window.localStorage.setItem(ADMIN_PROFILE_NAME_KEY, nextName);
-      window.sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(nextSession));
-    } catch {}
-
-    setAdminSession(nextSession);
-    setProfileEditorOpen(false);
-    setProfileOpen(false);
-  };
-
-  const handleSaveSecretPhrase = (event) => {
-    event.preventDefault();
-
-    const nextPhrase = normalizeSecretPhrase(secretPhraseInput);
-    if (!nextPhrase) return;
-
-    try {
-      window.localStorage.setItem(ADMIN_SECRET_PHRASE_KEY, nextPhrase);
-    } catch {}
-
-    setCurrentSecretPhrase(nextPhrase);
-    setSecretPhraseInput(nextPhrase);
-    setSecretEditorOpen(false);
+  const handleSaveProfile = () => {
+    handleSaveDisplayName();
+    setProfileEditing(false);
     setProfileOpen(false);
   };
 
   const handleSignOut = async () => {
-    // Clear new role-based session
-    try {
-      const { clearSession } = await import('../../lib/auth');
-      const { getApiBaseUrl } = await import('../../lib/api');
-      await fetch(`${getApiBaseUrl()}/api/users/logout/`, {
-        method: 'POST',
-        credentials: 'include',
-      }).catch(() => {});
-      clearSession();
-    } catch {}
-
-    // Clear legacy session
-    try {
-      window.sessionStorage.removeItem(ADMIN_AUTH_KEY);
-      window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
-    } catch {}
-
-    setProfileOpen(false);
-    router.replace('/');
+    setSigningOut(true);
+    const success = await globalSignOut();
+    if (success) {
+      setProfileOpen(false);
+      router.replace('/');
+    }
+    setSigningOut(false);
   };
 
   return (
@@ -785,13 +639,22 @@ export default function AnalyticsDashboard() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 54 }}>
+          <a href="/drive" style={{
+            padding: '7px 16px', borderRadius: 10,
+            background: '#fff', color: T.greenDk,
+            border: `1px solid ${T.border}`,
+            fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700,
+            textDecoration: 'none',
+          }}>
+            Back to Drive
+          </a>
           <a href="/dashboard" style={{
             padding: '7px 16px', borderRadius: 10,
             background: T.greenDk, color: '#fff',
             fontFamily: "'Manrope', sans-serif", fontSize: 12, fontWeight: 700,
             textDecoration: 'none',
           }}>
-            ← Finance Dashboard
+            Dashboard
           </a>
           <button onClick={load} disabled={loading} style={{
             padding: '7px 16px', borderRadius: 10,
@@ -827,7 +690,7 @@ export default function AnalyticsDashboard() {
               boxShadow: '0 8px 18px rgba(19,48,32,0.16)',
             }}
           >
-            {adminInitials}
+            {initials}
           </button>
 
           {profileOpen && (
@@ -837,354 +700,155 @@ export default function AnalyticsDashboard() {
                 position: 'absolute',
                 top: 'calc(100% + 10px)',
                 right: 0,
-                width: 324,
-                borderRadius: 22,
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(249,246,238,0.98) 100%)',
-                border: '1px solid rgba(193,113,16,0.18)',
-                boxShadow: '0 24px 56px rgba(19,48,32,0.18), 0 8px 18px rgba(19,48,32,0.08)',
-                overflow: 'hidden',
+                width: 280,
+                padding: 14,
+                borderRadius: 14,
+                background: 'rgba(255,255,255,0.98)',
+                border: '1px solid rgba(19,48,32,0.12)',
+                boxShadow: '0 18px 36px rgba(19,48,32,0.18)',
                 zIndex: 50,
               }}
             >
-              <div style={{
-                padding: '18px 18px 16px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 14,
-                background: 'linear-gradient(180deg, rgba(255,179,71,0.12) 0%, rgba(255,255,255,0) 100%)',
-                borderBottom: `1px solid ${T.border}`,
-              }}>
-                <div style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #133020 0%, #046241 100%)',
-                  color: '#fff',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontWeight: 800,
-                  fontSize: 18,
-                  border: `3px solid rgba(255,179,71,0.95)`,
-                  boxShadow: '0 10px 18px rgba(19,48,32,0.16)',
-                  flexShrink: 0,
-                }}>
-                  {adminInitials}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 16, fontWeight: 800, color: T.greenDk }}>
-                    {adminSession.displayName}
-                  </div>
-                  <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3 }}>
-                    {adminSession.email}
-                  </div>
-                  <div style={{
-                    marginTop: 10,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '6px 11px',
-                    borderRadius: 999,
-                    background: 'linear-gradient(180deg, rgba(4,98,65,0.12) 0%, rgba(4,98,65,0.08) 100%)',
-                    border: '1px solid rgba(4,98,65,0.12)',
-                    color: T.greenDk,
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: 11,
-                    fontWeight: 800,
-                  }}>
-                    <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: T.green }} />
-                    Admin
-                  </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: T.greenDk }}>{displayName || userSession?.username}</div>
+                <div style={{ fontSize: 12, color: T.muted }}>{userSession?.email}</div>
+                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 999, background: 'linear-gradient(180deg, rgba(4,98,65,0.12) 0%, rgba(4,98,65,0.08) 100%)', border: '1px solid rgba(4,98,65,0.12)', color: T.green, fontSize: 11, fontWeight: 800 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.green }} />
+                  {roleLabel}
                 </div>
               </div>
 
-              <div style={{
-                padding: '14px 18px',
-                borderBottom: `1px solid ${T.border}`,
-                background: 'rgba(19,48,32,0.03)',
-                fontFamily: "'Manrope', sans-serif",
-                fontSize: 12,
-                color: T.muted,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                <span aria-hidden="true" style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: 'rgba(4,98,65,0.08)',
-                  color: T.green,
-                  fontSize: 11,
-                }}>◷</span>
-                <span>Last login: {formattedLastLogin}</span>
-              </div>
+              <button
+                onClick={() => {
+                  setDisplayNameInput(displayName);
+                  setProfileEditing(true);
+                  setProfileOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  border: '1px solid rgba(19,48,32,0.12)',
+                  borderRadius: 10,
+                  background: '#fff',
+                  color: T.greenDk,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+                type="button"
+              >
+                Edit Profile
+              </button>
 
-              <div style={{ padding: 12, display: 'grid', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProfileNameInput(adminSession.displayName);
-                    setProfileUsernameInput(adminUsername);
-                    setProfileOpen(false);
-                    setProfileEditorOpen(true);
-                  }}
-                  className="profile-action-button profile-action-button--edit"
-                  style={{
-                    ...profileActionStyle,
-                  }}
-                >
-                  <span aria-hidden="true" style={{ ...profileActionIconStyle, background: 'rgba(124,58,237,0.10)', color: '#5B21B6' }}>👤</span>
-                  <span>Edit Profile</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const storedSecretPhrase = getStoredAdminSecretPhrase(window.localStorage);
-                    setCurrentSecretPhrase(storedSecretPhrase);
-                    setSecretPhraseInput('');
-                    setShowCurrentSecretPhrase(false);
-                    setProfileOpen(false);
-                    setSecretEditorOpen(true);
-                  }}
-                  className="profile-action-button profile-action-button--secret"
-                  style={{
-                    ...profileActionStyle,
-                  }}
-                >
-                  <span aria-hidden="true" style={{ ...profileActionIconStyle, background: 'rgba(255,179,71,0.16)', color: T.amber }}>◌</span>
-                  <span>Change Secret Key</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="profile-action-button profile-action-button--signout"
-                  style={{
-                    ...profileActionStyle,
-                  }}
-                >
-                  <span aria-hidden="true" style={{ ...profileActionIconStyle, background: 'rgba(220,38,38,0.10)', color: T.red }}>⇦</span>
-                  <span>Sign Out</span>
-                </button>
-              </div>
+              <button
+                onClick={handleSignOut}
+                style={{
+                  marginTop: 8,
+                  width: '100%',
+                  border: '1px solid rgba(193,113,16,0.25)',
+                  borderRadius: 10,
+                  background: 'rgba(255,179,71,0.16)',
+                  color: T.greenDk,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+                type="button"
+              >
+                Sign Out
+              </button>
             </div>
           )}
         </div>
       </nav>
 
-      {profileEditorOpen && (
-        <div style={modalOverlayStyle} onClick={() => setProfileEditorOpen(false)}>
-          <div style={modalCardStyle} onClick={(event) => event.stopPropagation()}>
-            <form onSubmit={handleSaveProfile}>
-              <div style={{ padding: '20px 22px 16px', borderBottom: `1px solid ${T.border}` }}>
-                <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>
-                  Profile Settings
-                </div>
-                <div style={{ marginTop: 8, fontFamily: "'Manrope', sans-serif", fontSize: 22, fontWeight: 800, color: T.greenDk }}>
-                  Edit Profile
-                </div>
-              </div>
+      {profileEditing && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(8,19,26,0.45)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 20,
+            zIndex: 100,
+          }}
+          onClick={() => setProfileEditing(false)}
+        >
+          <div
+            style={{
+              width: 'min(100%, 400px)',
+              borderRadius: 18,
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(249,246,238,0.98) 100%)',
+              border: '1px solid rgba(19,48,32,0.12)',
+              padding: 18,
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: T.greenDk }}>Profile Settings</h2>
+            <p style={{ margin: '6px 0 12px', fontSize: 12, color: T.muted }}>Update how your profile name appears.</p>
 
-              <div style={{ padding: 22, display: 'grid', gap: 16 }}>
-                <label style={{ display: 'grid', gap: 8, fontSize: 13, fontWeight: 700, color: T.greenDk }}>
-                  Display Name
-                  <input
-                    value={profileNameInput}
-                    onChange={(event) => setProfileNameInput(event.target.value)}
-                    style={{
-                      width: '100%',
-                      borderRadius: 14,
-                      border: '1px solid rgba(19,48,32,0.10)',
-                      background: 'rgba(255,255,255,0.82)',
-                      color: T.greenDk,
-                      padding: '13px 14px',
-                      outline: 'none',
-                      fontFamily: "'Manrope', sans-serif",
-                      fontSize: 14,
-                    }}
-                    placeholder="Admin User"
-                  />
-                </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.greenDk }}>Display name</span>
+              <input
+                autoComplete="name"
+                onChange={(event) => setDisplayNameInput(event.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: 42,
+                  border: '1px solid rgba(19,48,32,0.12)',
+                  borderRadius: 12,
+                  padding: '0 12px',
+                  fontSize: 14,
+                }}
+                type="text"
+                value={displayNameInput}
+              />
+            </label>
 
-                <label style={{ display: 'grid', gap: 8, fontSize: 13, fontWeight: 700, color: T.greenDk }}>
-                  Username
-                  <input
-                    value={profileUsernameInput}
-                    onChange={(event) => setProfileUsernameInput(event.target.value)}
-                    style={{
-                      width: '100%',
-                      borderRadius: 14,
-                      border: '1px solid rgba(19,48,32,0.10)',
-                      background: 'rgba(255,255,255,0.82)',
-                      color: T.greenDk,
-                      padding: '13px 14px',
-                      outline: 'none',
-                      fontFamily: "'Manrope', sans-serif",
-                      fontSize: 14,
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div style={{ padding: '0 22px 22px', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setProfileEditorOpen(false)}
-                  style={{
-                    borderRadius: 14,
-                    border: '1px solid rgba(19,48,32,0.08)',
-                    background: '#fff',
-                    color: T.greenDk,
-                    padding: '12px 16px',
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    borderRadius: 14,
-                    border: 0,
-                    background: 'linear-gradient(135deg, #f5c36d 0%, #ff9f43 100%)',
-                    color: T.greenDk,
-                    padding: '12px 18px',
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Save Profile
-                </button>
-              </div>
-            </form>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button
+                onClick={() => setProfileEditing(false)}
+                style={{
+                  flex: 1,
+                  minHeight: 40,
+                  border: '1px solid rgba(19,48,32,0.12)',
+                  borderRadius: 12,
+                  background: '#fff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={profileSaving}
+                onClick={handleSaveProfile}
+                style={{
+                  flex: 1,
+                  minHeight: 40,
+                  border: '0',
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #FFB347, #FFC370)',
+                  color: T.greenDk,
+                  fontWeight: 800,
+                  cursor: profileSaving ? 'not-allowed' : 'pointer',
+                  opacity: profileSaving ? 0.7 : 1,
+                }}
+                type="button"
+              >
+                {profileSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {secretEditorOpen && (
-        <div style={modalOverlayStyle} onClick={() => setSecretEditorOpen(false)}>
-          <div style={modalCardStyle} onClick={(event) => event.stopPropagation()}>
-            <form onSubmit={handleSaveSecretPhrase}>
-              <div style={{ padding: '20px 22px 16px', borderBottom: `1px solid ${T.border}` }}>
-                <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted }}>
-                  Shortcut Settings
-                </div>
-                <div style={{ marginTop: 8, fontFamily: "'Manrope', sans-serif", fontSize: 22, fontWeight: 800, color: T.greenDk }}>
-                  Change Secret Key
-                </div>
-              </div>
 
-              <div style={{ padding: 22, display: 'grid', gap: 16 }}>
-                <label style={{ display: 'grid', gap: 8, fontSize: 13, fontWeight: 700, color: T.greenDk }}>
-                  Previous Secret Key
-                  <div style={secretFieldWrapStyle}>
-                    <input
-                      value={currentSecretPhrase}
-                      readOnly
-                      type={showCurrentSecretPhrase ? 'text' : 'password'}
-                      style={secretFieldInputStyle}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentSecretPhrase((value) => !value)}
-                      style={secretRevealButtonStyle}
-                      aria-label={showCurrentSecretPhrase ? 'Hide previous secret key' : 'Show previous secret key'}
-                    >
-                      {showCurrentSecretPhrase ? (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.89 1 12c.92-2.6 2.61-4.82 4.83-6.32" />
-                          <path d="M10.58 10.58A2 2 0 0 0 12 14a2 2 0 0 0 1.42-.58" />
-                          <path d="M1 1l22 22" />
-                          <path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c5 0 9.27 3.11 11 8a11.8 11.8 0 0 1-2.16 3.19" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </label>
-                <label style={{ display: 'grid', gap: 8, fontSize: 13, fontWeight: 700, color: T.greenDk }}>
-                  New Secret Key
-                  <div style={secretFieldWrapStyle}>
-                    <input
-                      value={secretPhraseInput}
-                      onChange={(event) => setSecretPhraseInput(event.target.value)}
-                      type={showNewSecretPhrase ? 'text' : 'password'}
-                      style={secretFieldInputStyle}
-                      placeholder="Secret Key"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewSecretPhrase((value) => !value)}
-                      style={secretRevealButtonStyle}
-                      aria-label={showNewSecretPhrase ? 'Hide new secret key' : 'Show new secret key'}
-                    >
-                      {showNewSecretPhrase ? (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.89 1 12c.92-2.6 2.61-4.82 4.83-6.32" />
-                          <path d="M10.58 10.58A2 2 0 0 0 12 14a2 2 0 0 0 1.42-.58" />
-                          <path d="M1 1l22 22" />
-                          <path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c5 0 9.27 3.11 11 8a11.8 11.8 0 0 1-2.16 3.19" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </label>
-              </div>
-
-              <div style={{ padding: '0 22px 22px', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setSecretEditorOpen(false)}
-                  style={{
-                    borderRadius: 14,
-                    border: '1px solid rgba(19,48,32,0.08)',
-                    background: '#fff',
-                    color: T.greenDk,
-                    padding: '12px 16px',
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    borderRadius: 14,
-                    border: 0,
-                    background: 'linear-gradient(135deg, #f5c36d 0%, #ff9f43 100%)',
-                    color: T.greenDk,
-                    padding: '12px 18px',
-                    fontFamily: "'Manrope', sans-serif",
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Save Secret Key
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ── Tab nav ── */}
       <div style={{
@@ -1792,18 +1456,40 @@ export default function AnalyticsDashboard() {
             )}
           </div>
         )}
+
+        {/* ══════════════════════════════════════════ RECEIPT ══ */}
+        {activeTab === 'Receipt' && (
+          <section style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(var(--lw-card-min), 1fr))',
+            gap: '16px',
+          }}>
+            <ComplianceAlerts receipts={receipts} loading={loading} />
+            <RecentReceipts receipts={receipts} loading={loading} />
+          </section>
+        )}
       </main>
       <style>{`
         :root {
+          --lw-paper: #f5eedb;
           --lw-white: #ffffff;
           --lw-sea-salt: #F9F7F7;
           --lw-dark: #133020;
           --lw-green: #046241;
           --lw-accent: #FFB347;
           --lw-accent-deep: #C17110;
+          --lw-earth: #FFC370;
           --lw-border: rgba(19,48,32,0.12);
           --lw-muted: #708E7C;
           --lw-text: #133020;
+          --lw-surface: rgba(255,255,255,0.86);
+          --lw-surface-alt: rgba(255,255,255,0.7);
+          --lw-shadow-soft: 0 18px 40px rgba(19,48,32,0.12);
+          --glass-bg: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.62) 100%);
+          --glass-highlight: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 60%);
+          --glass-border: 1px solid var(--lw-border);
+          --glass-shadow: 0 18px 40px rgba(19,48,32,0.12);
+          --lw-card-min: 340px;
         }
         @keyframes shimmer {
           0%   { background-position: -200% 0; }

@@ -71,6 +71,11 @@
   font-weight: 800;
 }
 
+.headingAi {
+  font-size: 1.35em;
+  line-height: 0.9;
+}
+
 .desc {
   margin: 0 auto;
   max-width: 34ch;

@@ -1,15 +1,15 @@
 'use client';
 
 import {
-  ArrowRight, CheckCircle2, ChevronRight, Clock3, File,
+  ArrowRight, BarChart3, CheckCircle2, ChevronRight, Clock3, File,
   Folder, FolderOpen, Grid3X3, LayoutDashboard, LayoutList,
-  Loader2, LogOut, Search, Sparkles, WifiOff,
+  Loader2, Search, Sparkles, WifiOff,
 } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { driveService } from '../../services/driveService';
-import { getStoredSession, signOut } from '../../lib/auth';
-import { getApiBaseUrl } from '../../lib/api';
+import { getStoredSession } from '../../lib/auth';
+import UserProfileMenu from '../../components/common/UserProfileMenu';
 import styles from './page.module.css';
 
 type DriveItem = {
@@ -90,7 +90,7 @@ export default function DrivePage() {
   const [error,            setError]             = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus]  = useState<string | null>(null);
   const [userType,         setUserType]          = useState<'new' | 'returning'>('new');
-  const [signingOut,       setSigningOut]        = useState(false);
+  const [canSeeAnalytics,  setCanSeeAnalytics]   = useState(false);
 
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
 
@@ -111,6 +111,7 @@ export default function DrivePage() {
       router.replace('/');
       return;
     }
+    setCanSeeAnalytics(Boolean(session.canAccessAnalytics || session.role === 'super_admin'));
 
     const fetchFiles = async () => {
       try {
@@ -127,12 +128,6 @@ export default function DrivePage() {
 
     fetchFiles();
   }, [router]);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    await signOut(getApiBaseUrl());
-    router.replace('/');
-  };
 
   const stats = summarizeTree(folders);
   const latestModified = useMemo(() => getLatestModified(folders), [folders]);
@@ -212,24 +207,24 @@ export default function DrivePage() {
           <div className={styles.topbarActions}>
             <a className={styles.navPill} href="/dashboard">
               <LayoutDashboard className={styles.navIcon} size={14} />
-              <span className={styles.navLabel}>AI Dashboard</span>
+              <span className={styles.navLabel}>Dashboard</span>
               <ArrowRight size={13} className={styles.navIcon} />
               <span className={styles.navActiveDot} aria-hidden="true" />
             </a>
+            {canSeeAnalytics ? (
+              <a className={styles.navPill} href="/analytics">
+                <BarChart3 className={styles.navIcon} size={14} />
+                <span className={styles.navLabel}>Analytics</span>
+                <ArrowRight size={13} className={styles.navIcon} />
+                <span className={styles.navActiveDot} aria-hidden="true" />
+              </a>
+            ) : null}
             <div className={styles.syncBadge}>
               <span className={styles.syncPulse} aria-hidden="true" />
               <span>{folders.length} folder{folders.length !== 1 ? 's' : ''} synced</span>
             </div>
             {/* Sign Out — calls API + clears session */}
-            <button
-              className={styles.signOut}
-              disabled={signingOut}
-              onClick={handleSignOut}
-              type="button"
-            >
-              <LogOut size={14} />
-              <span>{signingOut ? 'Signing out…' : 'Sign Out'}</span>
-            </button>
+            <UserProfileMenu />
           </div>
         </header>
 
@@ -413,3 +408,4 @@ export default function DrivePage() {
     </>
   );
 }
+

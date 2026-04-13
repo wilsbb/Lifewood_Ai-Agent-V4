@@ -87,7 +87,9 @@ export default function HomePage() {
 
         <div className={styles.content}>
           <span className={styles.kicker}>Finance workspace</span>
-          <h1 className={styles.heading}>fAInance</h1>
+          <h1 className={styles.heading}>
+            F<span className={styles.headingAi}>AI</span>NANCE
+          </h1>
           <p className={styles.desc}>
             Enter your credentials to open the Lifewood Finance workspace.
           </p>

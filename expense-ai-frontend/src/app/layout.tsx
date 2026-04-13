@@ -1,6 +1,5 @@
 import './globals.css';
 import { Manrope } from 'next/font/google';
-import SecretAnalyticsShortcut from '../components/SecretAnalyticsShortcut';
 import SharedChatbot from '../components/chat/SharedChatbot';
 
 const manrope = Manrope({
@@ -22,7 +21,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={manrope.className}>
         {children}
-        <SecretAnalyticsShortcut />
         <SharedChatbot />
       </body>
     </html>
