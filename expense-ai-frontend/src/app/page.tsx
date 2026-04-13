@@ -99,7 +99,7 @@ export default function HomePage() {
         <div className={styles.formPanel} aria-label="Sign in">
           <header className={styles.formHeader}>
             <img alt="Lifewood" className={styles.formLogo} src={LOGO_URL} />
-            <h1 className={styles.formTitle}>Welcome Back</h1>
+            <h1 className={styles.formTitle}>Welcome</h1>
             <p className={styles.formSubtitle}>
               Sign in to your Lifewood Finance account.
             </p>
