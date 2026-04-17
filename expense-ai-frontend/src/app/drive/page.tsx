@@ -196,8 +196,6 @@ export default function DrivePage() {
           {/* Brand */}
           <a className={styles.brand} href="/drive">
             <img alt="Lifewood" className={styles.brandLogo} src={LOGO_URL} />
-            <span className={styles.brandSeparator} aria-hidden="true" />
-            <span className={styles.brandBadge}>Finance AI</span>
           </a>
 
           {/* Centre nav */}
@@ -233,10 +231,12 @@ export default function DrivePage() {
           {/* Hero banner */}
           <section className={styles.heroBanner}>
             <div className={styles.heroBannerLeft}>
-              <span className={styles.heroTagline}>
-                <span className={styles.heroTaglineOn}>ALWAYS ON</span>
-                <span className={styles.heroTaglineOff}>NEVER OFF</span>
-              </span>
+              <img 
+                src="/fainance-logo.png" 
+                alt="FAINANCE" 
+                className={styles.heroTagline}
+                style={{ maxWidth: '300px', height: 'auto' }}
+              />
               <h1 className={`${styles.greetingText} ${styles.greetingHeader} ${userType === 'new' ? styles.newUserHeaderIn : styles.returningUserHeaderIn}`}>
                 {greetingContent.header}
               </h1>

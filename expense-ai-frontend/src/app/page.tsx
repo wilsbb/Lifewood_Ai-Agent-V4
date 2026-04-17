@@ -85,11 +85,12 @@ export default function HomePage() {
           <div className={styles.brandInner}>
             <div className={styles.brandText}>
               <div className={styles.brandProductLogoWrap}>
-                <span className={styles.fainanceLogo} aria-label="FAINANCE">
-                  <span className={styles.fainanceF}>F</span>
-                  <span className={styles.fainanceAI}>AI</span>
-                  <span className={styles.fainanceNANCE}>NANCE</span>
-                </span>
+                <img 
+                  src="fainance-logo.png" 
+                  alt="FAINANCE" 
+                  className={styles.fainanceLogo}
+                  style={{ width: '100%', height: 'auto', maxWidth: '380px' }}
+                />
               </div>
               <p className={styles.brandSubtitle}>Finance Workspace</p>
             </div>
