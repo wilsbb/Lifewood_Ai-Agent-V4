@@ -1,17 +1,17 @@
 .pageShell {
-  --paper: #faf8f6;
+  --paper: #f5eedb;
   --white: #ffffff;
   --surface: #f1f2ef;
   --surface-raised: #f6f6f3;
-  --sea-salt: #faf8f6;
+  --sea-salt: #F9F7F7;
   --saffaron: #f5a623;
-  --earth-yellow: #f7be68;
+  --earth-yellow: #FFC370;
   --castleton-green: #046241;
-  --dark-serpent: #0f261a;
-  --border: rgba(15, 38, 26, 0.1);
-  --shadow-sm: 0 2px 10px rgba(15, 38, 26, 0.04);
-  --shadow: 0 10px 28px rgba(15, 38, 26, 0.08);
-  --shadow-lg: 0 18px 48px rgba(15, 38, 26, 0.12);
+  --dark-serpent: #133020;
+  --border: rgba(19,48,32,0.1);
+  --shadow-sm: 0 2px 10px rgba(19,48,32,0.04);
+  --shadow: 0 10px 28px rgba(19,48,32,0.08);
+  --shadow-lg: 0 18px 48px rgba(19,48,32,0.12);
   --radius-sm: 12px;
   --radius: 16px;
   --radius-lg: 20px;
